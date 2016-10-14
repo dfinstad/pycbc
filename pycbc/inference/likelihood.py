@@ -27,6 +27,7 @@ for parameter estimation.
 """
 
 from pycbc import filter
+from pycbc import vetoes, strain, events # this is for temp chisq weighting test
 from pycbc.types import Array
 import numpy
 
@@ -39,12 +40,10 @@ def _noprior(params):
 def snr_from_loglr(loglr):
     """Returns SNR computed from the given log likelihood ratio(s). This is
     defined as `sqrt(2*loglr)`.If the log likelihood ratio is < 0, returns 0.
-
     Parameters
     ----------
     loglr : array or float
         The log likelihood ratio(s) to evaluate.
-
     Returns
     -------
     array or float
@@ -65,21 +64,14 @@ def snr_from_loglr(loglr):
 class _BaseLikelihoodEvaluator(object):
     r"""Base container class for generating waveforms, storing the data, and
     computing posteriors.
-
     The nomenclature used by this class and those that inherit from it is as
     follows: Given some model parameters :math:`\Theta` and some data
     :math:`d` with noise model :math:`n`, we define:
-
      * the *likelihood function*: :math:`p(d|\Theta)`
-
      * the *noise likelihood*: :math:`p(d|n)`
-
      * the *likelihood ratio*: :math:`\mathcal{L}(\Theta) = \frac{p(d|\Theta)}{p(d|n)}`
-
      * the *prior*: :math:`p(\Theta)`
-
      * the *posterior*: :math:`p(\Theta|d) \propto p(d|\Theta)p(\Theta)`
-
      * the *prior-weighted likelihood ratio*: :math:`\hat{\mathcal{L}}(\Theta) = \frac{p(d|\Theta)p(\Theta)}{p(d|n)}
    
      * the *SNR*: :math:`\rho(\Theta) = \sqrt{2\log\mathcal{L}(\Theta)}`; for
@@ -87,18 +79,15 @@ class _BaseLikelihoodEvaluator(object):
        SNR used in the CBC search.
    
     .. note::
-
         Although the posterior probability is only proportional to
         :math:`p(d|\Theta)p(\Theta)`, here we refer to this quantity as the
         posterior. Also note that for a given noise model, the prior-weighted
         likelihood ratio is proportional to the posterior, and so the two can
         usually be swapped for each other.
-
     When performing parameter estimation we work with the log of these values
     since we are mostly concerned with their values around the maxima. If
     we have multiple detectors, each with data :math:`d_i`, then these values
     simply sum over the detectors. For example, the log likelihood ratio is:
-
     .. math::
         \log \mathcal{L}(\Theta) = \sum_i \left[\log p(\Theta|d_i) - \log p(n|d_i)\right]
    
@@ -108,11 +97,9 @@ class _BaseLikelihoodEvaluator(object):
     the methods for computing these values raise `NotImplementedError`s. These
     functions need to be monkey patched, or other classes that inherit from
     this class need to define their own functions.
-
     Instances of this class can be called like a function. The default is for
     this class to call its `logposterior` function, but this can be changed by
     with the `set_callfunc` method.
-
     Parameters
     ----------
     waveform_generator : generator class
@@ -130,7 +117,6 @@ class _BaseLikelihoodEvaluator(object):
         A callable class or function that computes the log of the prior. If
         None provided, will use `_noprior`, which returns 0 for all parameter
         values.
-
     Attributes
     ----------
     waveform_generator : dict
@@ -142,7 +128,6 @@ class _BaseLikelihoodEvaluator(object):
     return_meta : {True, bool}
         If True, `logposterior` and `logplr` will return the value of the
         prior and the loglikelihood ratio, along with the posterior/plr.
-
     Methods
     -------
     prior :
@@ -244,7 +229,6 @@ class _BaseLikelihoodEvaluator(object):
     def _formatreturn(self, val, prior=None, loglr=None):
         """Adds the prior to the return value if return_meta is True.
         Otherwise, just returns the value.
-
         Parameters
         ----------
         val : float
@@ -253,7 +237,6 @@ class _BaseLikelihoodEvaluator(object):
             The value of the prior.
         loglr : {None, float}
             The value of the log likelihood-ratio.
-
         Returns
         -------
         val : float
@@ -298,7 +281,6 @@ class _BaseLikelihoodEvaluator(object):
     @classmethod
     def set_callfunc(cls, funcname):
         """Sets the function used when the class is called as a function.
-
         Parameters
         ----------
         funcname : str
@@ -314,38 +296,26 @@ class _BaseLikelihoodEvaluator(object):
 
 class GaussianLikelihood(_BaseLikelihoodEvaluator):
     r"""Computes log likelihoods assuming the detectors' noise is Gaussian.
-
     With Gaussian noise the log likelihood functions for signal
     :math:`\log p(d|\Theta)` and for noise :math:`log p(d|n)` are given by:
-
     .. math::
-
         \log p(d|\Theta) = -\frac{1}{2} \sum_i \left<h_i(\Theta) - d_i | h_i(\Theta - d_i\right>
-
         \log p(d|n) = -\frac{1}{2} \sum_i \left<d_i | d_i\right>
-
     where the sum is over the number of detectors, :math:`d_i` is the data in
     each detector, and :math:`h_i(\Theta)` is the model signal in each
     detector. The inner product is given by:
-
     .. math::
-
         \left<a | b\right> = 4\Re \int_{0}^{\infty} \frac{\tilde{a}(f) \tilde{b}(f)}{S_n(f)} \mathrm{d}f,
-
     where :math:`S_n(f)` is the PSD in the given detector.
     
     Note that the log prior-weighted likelihood ratio has one less term
     than the log posterior, since the :math:`\left<d_i|d_i\right>` term cancels
     in the likelihood ratio:
-
     .. math::
-
         \log \hat{\mathcal{L}} = \log p(\Theta) + \sum_i \left\[\left<h_i(\Theta)|d_i\right> - \frac{1}{2} \left<h_i(\Theta)|h_i(\Theta)\right>\right]
-
     For this reason, by default this class returns `logplr` when called as a
     function instead of `logposterior`. This can be changed via the
     `set_callfunc` method.
-
     Upon initialization, the data is whitened using the given PSDs. If no PSDs
     are given the data and waveforms returned by the waveform generator are
     assumed to be whitened. The likelihood function of the noise,
@@ -353,16 +323,13 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     .. math::
     
         p(d|n) = \frac{1}{2} \sum_i \left<d_i|d_i\right>,
-
     is computed on initialization and stored as the `lognl` attribute.
     
     By default, the data is assumed to be equally sampled in frequency, but
     unequally sampled data can be supported by passing the appropriate
     normalization using the `norm` keyword argument.
-
     For more details on initialization parameters and definition of terms, see
     `_BaseLikelihoodEvaluator`.
-
     Parameters
     ----------
     waveform_generator : generator class
@@ -396,7 +363,6 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     return_meta : {True, bool}
         If True, `logposterior` and `logplr` will return the value of the
         prior and the loglikelihood ratio, along with the posterior/plr.
-
     Examples
     --------
     Create a signal, and set up the likelihood evaluator on that signal:
@@ -410,21 +376,17 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     >>> psd = pypsd.aLIGOZeroDetHighPower(N, 1./seglen, 20.)
     >>> psds = {'H1': psd, 'L1': psd}
     >>> likelihood_eval = inference.GaussianLikelihood(generator, signal, fmin, psds=psds, return_meta=False)
-
     Now compute the log likelihood ratio and prior-weighted likelihood ratio;
     since we have not provided a prior, these should be equal to each other:
     >>> likelihood_eval.loglr([tsig]), likelihood_eval.logplr([tsig])
     (ArrayWithAligned(277.92945279883855), ArrayWithAligned(277.92945279883855))
-
     Compute the log likelihood and log posterior; since we have not
     provided a prior, these should both be equal to zero:
     >>> likelihood_eval.loglikelihood([tsig]), likelihood_eval.logposterior([tsig])
     (ArrayWithAligned(0.0), ArrayWithAligned(0.0))
-
     Compute the SNR; for this system and PSD, this should be approximately 24:
     >>> likelihood_eval.snr([tsig])
     ArrayWithAligned(23.576660187517593)
-
     Using the same likelihood evaluator, evaluate the log prior-weighted
     likelihood ratio at several points in time, check that the max is at tsig,
     and plot (note that we use the class as a function here, which defaults
@@ -438,7 +400,6 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     >>> ax.plot(times, lls)
     [<matplotlib.lines.Line2D at 0x1274b5c50>]
     >>> fig.show()
-
     Create a prior and use it (see prior module for more details):
     >>> from pycbc.inference import prior
     >>> uniform_prior = prior.Uniform(tc=(tsig-0.2,tsig+0.2))
@@ -498,14 +459,11 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
         .. math::
             
             \log \mathcal{L}(\Theta) = \sum_i \left<h_i(\Theta)|d_i\right> - \frac{1}{2}\left<h_i(\Theta)|h_i(\Theta)\right>,
-
         at the given point in parameter space :math:`\Theta`.
-
         Parameters
         ----------
         params: array-like
             An array of numerical values to pass to the waveform generator.
-
         Returns
         -------
         float
@@ -515,11 +473,26 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
         for det,h in self._waveform_generator.generate(*params).items():
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
+	    
+	    ############# stuff added to try chisq weighting ######################  
+	    chisq_bins = 16.
+	    stilde = self.data[det][self._kmin:kmax]
+	    psd = norm/numpy.square(self._weight[det][self._kmin:kmax])
+	    chisq, raw_bin = vetoes.power_chisq(h, stilde, chisq_bins, psd, 
+                                    low_frequency_cutoff=f_lower, 
+                                    return_bins=True)
+	    chisq /= chisq_bins * 2 - 2
+	    t = self._waveform_generator.current_params['tc']
+	    snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
+	    new_snr_term = newsnr(snr_term, chisq[t], q=6., n=2.)
+	    #######################################################################
+
             # whiten the waveform
             h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
             lr += (
                 # <h, d>
-                self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                # self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
+		new_snr_term
                 # - <h, h>/2.
                 - 0.5*h[self._kmin:kmax].inner(h[self._kmin:kmax]).real
                 )
@@ -531,12 +504,10 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
         .. math::
         
         p(d|\Theta) = -\frac{1}{2}\sum_i \left<h_i(\Theta) - d_i | h_i(\Theta) - d_i\right>
-
         Parameters
         ----------
         params: array-like
             An array of numerical values to pass to the waveform generator.
-
         Returns
         -------
         float
@@ -550,12 +521,10 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     def logposterior(self, params):
         """Computes the log-posterior probability at the given point in
         parameter space.
-
         Parameters
         ----------
         params: array-like
             An array of numerical values to pass to the waveform generator.
-
         Returns
         -------
         float
