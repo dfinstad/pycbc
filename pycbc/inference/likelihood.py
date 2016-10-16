@@ -27,8 +27,8 @@ for parameter estimation.
 """
 
 from pycbc import filter
-from pycbc import vetoes, strain, events # this is for temp chisq weighting test
-from pycbc.types import Array
+from pycbc import vetoes, events # this is for chisq weighting
+from pycbc.types import Array, FrequencySeries
 import numpy
 
 def _noprior(params):
@@ -426,7 +426,9 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
         self._kmax = kmax
         if norm is None:
             norm = 4*d.delta_f
-        # we'll store the weight to apply to the inner product
+	self._norm = norm # added to use in loglr method
+        self._f_lower = f_lower # added to use in loglr
+	# we'll store the weight to apply to the inner product
         if psds is None:
             w = Array(numpy.sqrt(norm)*numpy.ones(N))
             # FIXME: use the following when we've switched to 2.7
@@ -474,17 +476,19 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
 	    
-	    ############# stuff added to try chisq weighting ######################  
+	    ############# stuff added for chisq weighting ######################  
 	    chisq_bins = 16.
 	    stilde = self.data[det][self._kmin:kmax]
-	    psd = norm/numpy.square(self._weight[det][self._kmin:kmax])
-	    chisq, raw_bin = vetoes.power_chisq(h, stilde, chisq_bins, psd, 
-                                    low_frequency_cutoff=f_lower, 
+	    psd_array = self._norm/numpy.square(self._weight[det][self._kmin:kmax])
+	    psd = FrequencySeries(psd_array, delta_f=self._norm/4.)
+	    chisq, raw_bin = vetoes.power_chisq(h[self._kmin:kmax], stilde, chisq_bins, psd, 
+                                    low_frequency_cutoff=self._f_lower, 
                                     return_bins=True)
 	    chisq /= chisq_bins * 2 - 2
 	    t = self._waveform_generator.current_params['tc']
+	    t_index = int((t - h.epoch) * 2048)
 	    snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
-	    new_snr_term = newsnr(snr_term, chisq[t], q=6., n=2.)
+	    new_snr_term = events.newsnr(snr_term, chisq[t_index], q=6., n=2.)
 	    #######################################################################
 
             # whiten the waveform
