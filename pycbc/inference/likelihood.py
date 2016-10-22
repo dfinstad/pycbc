@@ -482,11 +482,29 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
 	    psd_array = self._norm/numpy.square(self._weight[det][self._kmin:kmax])
 	    psd = FrequencySeries(psd_array, delta_f=self._norm/4.)
 	    chisq, raw_bin = vetoes.power_chisq(h[self._kmin:kmax], stilde, chisq_bins, psd, 
-                                    low_frequency_cutoff=self._f_lower, 
+                                    low_frequency_cutoff=self._f_lower,
                                     return_bins=True)
 	    chisq /= chisq_bins * 2 - 2
 	    t = self._waveform_generator.current_params['tc']
 	    t_index = int((t - h.epoch) * 2048)
+	    # diagnostic info
+	    print 'Template length:', len(h)
+	    print 'kmin =', self._kmin
+	    print 'kmax = min(len(h), self._kmax) =', kmax
+	    print 'Waveform generator time (tc):', t
+	    print 'GPS start time:', h.epoch
+	    print 'Length of chisq time-series:', len(chisq)
+	    print 'Calculated index for chisq time-series:', t_index
+	    print 'Chisq start/end times:', chisq.start_time, chisq.end_time
+	    print 'h/stilde delta_f:', h.delta_f, stilde.delta_f
+	    print 'h sample freqs:', h.sample_frequencies
+	    print 'stilde sample freqs:', stilde.sample_frequencies
+	    print '#############################################'
+	    # ratio = (t - h.epoch)/4.
+	    # t_index = int(ratio * len(chisq))
+	    #print 'tc to gps start time ratio:', ratio
+	    #print 'New t_index:', t_index
+	    #print '######'
 	    snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
 	    new_snr_term = events.newsnr(snr_term, chisq[t_index], q=6., n=2.)
 	    #######################################################################
