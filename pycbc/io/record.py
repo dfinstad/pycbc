@@ -30,6 +30,7 @@ waves.
 
 import os, sys, types, re, copy, numpy, inspect
 from glue.ligolw import types as ligolw_types
+from pycbc import coordinates
 from pycbc.detector import Detector
 from pycbc.waveform import parameters
 
@@ -1227,6 +1228,67 @@ class FieldArray(numpy.recarray):
             leftovers &= ~mask
         return out, numpy.where(leftovers)[0]
 
+    def append(self, other):
+        """Appends another array to this array.
+
+        The returned array will have all of the class methods and virutal
+        fields of this array, including any that were added using `add_method`
+        or `add_virtualfield`. If this array and other array have one or more
+        string fields, the dtype for those fields are updated to a string
+        length that can encompass the longest string in both arrays.
+
+        .. note::
+            Increasing the length of strings only works for fields, not
+            sub-fields.
+
+        Parameters
+        ----------
+        other : array
+            The array to append values from. It must have the same fields and
+            dtype as this array, modulo the length of strings. If the other
+            array does not have the same dtype, a TypeError is raised.
+
+        Returns
+        -------
+        array
+            An array with others values appended to this array's values. The
+            returned array is an instance of the same class as this array,
+            including all methods and virtual fields.
+        """
+        try:
+            return numpy.append(self, other).view(type=self.__class__)
+        except TypeError:
+            # see if the dtype error was due to string fields having different
+            # lengths; if so, we'll make the joint field the larger of the
+            # two
+            str_fields = [name for name in self.fieldnames
+                          if _isstring(self.dtype[name])]
+            # get the larger of the two
+            new_strlens = dict(
+                [[name,
+                  max(self.dtype[name].itemsize, other.dtype[name].itemsize)]
+                 for name in str_fields]
+            )
+            # cast both to the new string lengths
+            new_dt = []
+            for dt in self.dtype.descr:
+                name = dt[0]
+                if name in new_strlens:
+                    dt = (name, self.dtype[name].type, new_strlens[name])
+                new_dt.append(dt)
+            new_dt = numpy.dtype(new_dt)
+            return numpy.append(
+                self.astype(new_dt),
+                other.astype(new_dt)
+                ).view(type=self.__class__)
+
+
+def _isstring(dtype):
+    """Given a numpy dtype, determines whether it is a string. Returns True
+    if the dtype is string or unicode.
+    """
+    return dtype.type == numpy.unicode_ or dtype.type == numpy.string_
+
 
 def aliases_from_fields(fields):
     """Given a dictionary of fields, will return a dictionary mapping the
@@ -1516,11 +1578,13 @@ class WaveformArray(_FieldArrayWithDefaults):
     _staticfields = (parameters.cbc_intrinsic_params +
                      parameters.extrinsic_params).dtype_dict
 
-    _virtualfields = [parameters.mchirp, parameters.eta, parameters.mtotal,
+    _virtualfields = [
+        parameters.mchirp, parameters.eta, parameters.mtotal,
         parameters.q, parameters.m_p, parameters.m_s, parameters.chi_eff,
         parameters.spin_px, parameters.spin_py, parameters.spin_pz,
-        parameters.spin_sx, parameters.spin_sy, parameters.spin_sz]
-
+        parameters.spin_sx, parameters.spin_sy, parameters.spin_sz,
+        parameters.spin1_a, parameters.spin1_azimuthal, parameters.spin1_polar,
+        parameters.spin2_a, parameters.spin2_azimuthal, parameters.spin2_polar]
 
     @property
     def m_p(self):
@@ -1622,6 +1686,48 @@ class WaveformArray(_FieldArrayWithDefaults):
         mask = self.mass1 < self.mass2
         out[mask] = self.spin1z[mask]
         return out
+
+    @property
+    def spin1_a(self):
+        """Returns the dimensionless spin magnitude of mass 1."""
+        out = coordinates.cartesian_to_spherical_rho(
+                                    self.spin1x, self.spin1y, self.spin1z)
+        return out / self.mass1**2
+
+    @property
+    def spin1_azimuthal(self):
+        """Returns the azimuthal spin angle of mass 1."""
+        # do not need to normalize by mass because it cancels
+        return coordinates.cartesian_to_spherical_azimuthal(
+                                     self.spin1x, self.spin1y)
+
+    @property
+    def spin1_polar(self):
+        """Returns the polar spin angle of mass 1."""
+        # do not need to normalize by mass because it cancels
+        return coordinates.cartesian_to_spherical_polar(
+                                     self.spin1x, self.spin1y, self.spin1z)
+
+    @property
+    def spin2_a(self):
+        """Returns the dimensionless spin magnitude of mass 2."""
+        out = coordinates.cartesian_to_spherical_rho(
+                                    self.spin1x, self.spin1y, self.spin1z)
+        return out / self.mass2**2
+
+    @property
+    def spin2_azimuthal(self):
+        """Returns the azimuthal spin angle of mass 2."""
+        # do not need to normalize by mass because it cancels
+        return coordinates.cartesian_to_spherical_azimuthal(
+                                     self.spin2x, self.spin2y)
+
+    @property
+    def spin2_polar(self):
+        """Returns the polar spin angle of mass 2."""
+        # do not need to normalize by mass because it cancels
+        return coordinates.cartesian_to_spherical_polar(
+                                     self.spin2x, self.spin2y, self.spin2z)
 
     def det_tc(self, detector):
         """Returns the coalesence time in the given detector."""

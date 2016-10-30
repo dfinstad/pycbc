@@ -28,6 +28,7 @@ provides additional abstraction and argument handling.
 """
 import Pegasus.DAX3 as dax
 import os
+import urlparse
 
 class ProfileShortcuts(object):
     """ Container of common methods for setting pegasus profile information
@@ -91,14 +92,18 @@ class Executable(ProfileShortcuts):
     def insert_into_dax(self, dax):
         dax.addExecutable(self._dax_executable)
         
-    def add_profile(self, namespace, key, value):
+    def add_profile(self, namespace, key, value, force=False):
         """ Add profile information to this executable
         """
         try:
             entry = dax.Profile(namespace, key, value)
             self._dax_executable.addProfile(entry)  
         except dax.DuplicateError:
-            pass
+            if force:
+                # Replace with the new key
+                self._dax_executable.removeProfile(entry)
+                self._dax_executable.addProfile(entry)
+        
  
 class Node(ProfileShortcuts):    
     def __init__(self, executable):
@@ -209,14 +214,17 @@ class Node(ProfileShortcuts):
         return fil
 
     # functions to describe properties of this node
-    def add_profile(self, namespace, key, value):
+    def add_profile(self, namespace, key, value, force=False):
         """ Add profile information to this node at the DAX level
         """
         try:
             entry = dax.Profile(namespace, key, value)
             self._dax_node.addProfile(entry)
         except dax.DuplicateError:
-            pass    
+            if force:
+                # Replace with the new key
+                self._dax_node.removeProfile(entry)
+                self._dax_node.addProfile(entry)
         
     def _finalize(self):
         args = self._args + self._options
@@ -432,11 +440,15 @@ class File(DataStorage, dax.File):
     @classmethod
     def from_path(cls, path):
         """Takes a path and returns a File object with the path as the PFN."""
-        if os.path.isabs(path):
-            path = os.path.abspath(path)
+        urlparts = urlparse.urlsplit(path)
+        site = 'nonlocal'
+        if (urlparts.scheme == '' or urlparts.scheme == 'file'):
+            if os.path.isfile(urlparts.path):
+                path = os.path.abspath(urlparts.path)
+                site = 'local'
 
         fil = File(os.path.basename(path))
-        fil.PFN(path, "local")
+        fil.PFN(path, site)
         return fil
     
 class Database(DataStorage):

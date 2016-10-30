@@ -26,40 +26,11 @@ inference samplers generate.
 """
 
 import h5py
+import numpy
 from pycbc import pnutils
 from pycbc.waveform import parameters as wfparams
 import pycbc.inference.sampler
 import pycbc.inference.likelihood
-
-def read_label_from_config(cp, variable_arg, section="labels"):
-    """ Returns the label for the variable_arg.
-
-    Parameters
-    ----------
-    cp : WorkflowConfigParser
-        A WorkflowConfigParser instance with [labels] section
-    variable_arg : str
-        The parameter to get label.
-    section : str
-        Name of section in configuration file to get label.
-
-    Returns
-    -------
-    label : str
-        The label for the parameter.
-    """
-
-    # get label from configuration file if it exists
-    if cp.has_option(section, variable_arg):
-        label = cp.get(section, variable_arg)
-    else:
-        # try looking in pycbc.waveform.parameters
-        try:
-            label = getattr(wfparams, variable_arg).label
-        except AttributeError:
-            # just use the parameter name
-            label = variable_arg
-    return label
 
 class InferenceFile(h5py.File):
     """ A subclass of the h5py.File object that has extra functions for
@@ -286,3 +257,42 @@ class InferenceFile(h5py.File):
             psd_dim = self.create_dataset(key+"/psds/0",
                                           data=psds[key])
             psd_dim.attrs["delta_f"] = psds[key].delta_f
+
+    def get_slice(self, thin_start=None, thin_interval=None, thin_end=None):
+        """Formats a slice using the given arguments that can be used to
+        retrieve a thinned array from an InferenceFile.
+
+        Parameters
+        ----------
+        thin_start : {None, int}
+            The starting index to use. If None, will try to retrieve the
+            `burn_in_iterations` from the given file. If no
+            `burn_in_iterations` exists, will default to the start of the
+            array.
+        thin_interval : {None, int}
+            The interval to use. If None, will try to retrieve the acl from the
+            given file. If no acl attribute exists, will default to 1.
+        thin_end : {None, int}
+            The end index to use. If None, will retrieve to the end of the
+            array.
+
+        Returns
+        -------
+        slice :
+            The slice needed.
+        """
+
+        # default is to skip burn in samples
+        if thin_start is None:
+            try:
+                thin_start = self.burn_in_iterations
+            except KeyError:
+                pass
+
+        # default is to use stored ACL and accept every i-th sample
+        if thin_interval is None:
+            try:
+                thin_interval = int(numpy.ceil(self.acl))
+            except KeyError:
+                pass
+        return slice(thin_start, thin_end, thin_interval)
