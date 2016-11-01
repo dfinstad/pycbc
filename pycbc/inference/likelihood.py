@@ -26,9 +26,10 @@ This modules provides classes and functions for evaluating the log likelihood
 for parameter estimation.
 """
 
-from pycbc import filter
-from pycbc import vetoes, events # this is for chisq weighting
-from pycbc.types import Array, FrequencySeries
+from pycbc import filter, waveform
+from pycbc.vetoes import power_chisq
+from pycbc.events import newsnr
+from pycbc.types import Array
 import numpy
 
 def _noprior(params):
@@ -411,7 +412,7 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     name = 'gaussian'
 
     def __init__(self, waveform_generator, data, f_lower, psds=None,
-            f_upper=None, norm=None, prior=None, return_meta=True):
+            psd_dyn=None, f_upper=None, norm=None, prior=None, return_meta=True):
         # set up the boiler-plate attributes; note: we'll compute the
         # log evidence later
         super(GaussianLikelihood, self).__init__(waveform_generator, data,
@@ -441,6 +442,9 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
             #self._weight = {det: Array(numpy.sqrt(norm/psds[det])) for det in data}
             self._weight = dict([(det, Array(numpy.sqrt(norm/psds[det]))) for det in data])
             numpy.seterr(**numpysettings)
+	# psd with dyn_range_fac applied, for use in chisq weighting in loglr
+	if psd_dyn:
+	    self._psd_dyn_dict=psd_dyn
         # whiten the data
         for det in self._data:
             self._data[det][kmin:kmax] *= self._weight[det][kmin:kmax]
@@ -478,18 +482,19 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
 	    
 	    ############# stuff added for chisq weighting ######################  
 	    chisq_bins = 16.
+
+	    # whitened data
 	    stilde = self.data[det][self._kmin:kmax]
 
-            # class docstring says self._weight[det] is 1/psd
-	    psd_array = self._norm/self._weight[det][self._kmin:kmax]
-	    psd_series = FrequencySeries(psd_array, delta_f=stilde.delta_f)
+	    # psd with dyn_range_fac already applied
+	    psd_series = self._psd_dyn_dict[det][self._kmin:kmax]
 
-	    # whitening
+	    # whitening of the template waveform
 	    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
-	    psd_series *= self._weight[det][self._kmin:kmax]
 
-	    chisq, raw_bin = vetoes.power_chisq(h[self._kmin:kmax], stilde, chisq_bins,
-                                                psd_series, return_bins=True)
+	    # using a factor of 1e5 here just to make the numbers look right
+	    chisq, raw_bin = power_chisq(h[self._kmin:kmax], stilde, chisq_bins,
+                                                psd_series*1e5, return_bins=True)
 	    chisq /= chisq_bins * 2 - 2
 	    t = self._waveform_generator.current_params['tc']
 	    t_index = int((t - h.epoch) * chisq.sample_rate)
@@ -509,14 +514,14 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
 	    #print '#############################################'
 
 	    snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
-	    new_snr_term = events.newsnr(snr_term, chisq[t_index], q=6., n=2.)
+	    new_snr_term = newsnr(snr_term, chisq[t_index], q=6., n=2.)
 	    #print 'Reduced chisq:', chisq[t_index]
 	    #print 'SNR and newSNR:', snr_term, new_snr_term
 	    #######################################################################
 
             lr += (
                 # <h, d>
-                # self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
+                #self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
 		new_snr_term
                 # - <h, h>/2.
                 - 0.5*h[self._kmin:kmax].inner(h[self._kmin:kmax]).real

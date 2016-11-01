@@ -229,7 +229,7 @@ with ctx:
     # construct class that will return the natural logarithm of likelihood
     likelihood = inference.likelihood_evaluators[opts.likelihood_evaluator](
                         generator, stilde_dict, opts.low_frequency_cutoff,
-                        psds=psd_dict, prior=prior)
+                        psds=psd_dict, psd_dyn=psd_dyn_dict, prior=prior)
 
     # create sampler that will run
     sampler = option_utils.sampler_from_cli(opts, likelihood)
@@ -294,20 +294,21 @@ with ctx:
             start-n_burnin,end-n_burnin,opts.niterations))
         sampler.run(end-start)
 
-        # write new samples
-        with InferenceFile(opts.output_file, "a") as fp:
-            logging.info("Writing results to file")
-            sampler.write_results(fp, max_iterations=opts.niterations+n_burnin)
-            # compute the acls and write
-            logging.info("Computing acls")
-            sampler.write_acls(fp, sampler.compute_acls(fp))
-            # compute evidence, if supported
-            try:
-                lnz, dlnz = sampler.calculate_logevidence(fp)
-                logging.info("Saving evidence")
-                sampler.write_logevidence(fp, lnz, dlnz)
-            except NotImplementedError:
-                pass
+# Moved this section out of for-loop to speed things up
+# write new samples
+with InferenceFile(opts.output_file, "a") as fp:
+    logging.info("Writing results to file")
+    sampler.write_results(fp, max_iterations=opts.niterations+n_burnin)
+    # compute the acls and write
+    logging.info("Computing acls")
+    sampler.write_acls(fp, sampler.compute_acls(fp))
+    # compute evidence, if supported
+    try:
+        lnz, dlnz = sampler.calculate_logevidence(fp)
+        logging.info("Saving evidence")
+        sampler.write_logevidence(fp, lnz, dlnz)
+    except NotImplementedError:
+        pass
 
 # exit
 logging.info("Done")
