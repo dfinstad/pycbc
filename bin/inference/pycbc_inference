@@ -70,6 +70,7 @@ parser.add_argument("--psd-start-time", type=float, default=None,
     help="Start time to use for PSD estimation if different from analysis.")
 parser.add_argument("--psd-end-time", type=float, default=None,
     help="End time to use for PSD estimation if different from analysis.")
+parser.add_argument("--snr", type=str, default='oldsnr')
 
 # add inference options
 parser.add_argument("--likelihood-evaluator", required=True,
@@ -90,6 +91,9 @@ parser.add_argument("--output-file", type=str, required=True,
     help="Output file path.")
 parser.add_argument("--checkpoint-interval", type=int, default=None,
     help="Number of iterations to take before saving new samples to file.")
+parser.add_argument("--checkpoint-fast", action="store_true",
+                    help="Do not calculate derived data (eg. ACL or evidence) "
+                         "after each checkpoint. Calculate them at the end.")
 
 # verbose option
 parser.add_argument("--verbose", action="store_true", default=False,
@@ -227,9 +231,11 @@ with ctx:
                         delta_f=delta_f_dict.values()[0], **static_args)
 
     # construct class that will return the natural logarithm of likelihood
+    logging.info("Log likelihood will be calculated using " + str(opts.snr))
     likelihood = inference.likelihood_evaluators[opts.likelihood_evaluator](
                         generator, stilde_dict, opts.low_frequency_cutoff,
-                        psds=psd_dict, psd_dyn=psd_dyn_dict, prior=prior)
+                        psds=psd_dict, psd_dyn=psd_dyn_dict, prior=prior,
+			snr=opts.snr)
 
     # create sampler that will run
     sampler = option_utils.sampler_from_cli(opts, likelihood)
@@ -294,21 +300,23 @@ with ctx:
             start-n_burnin,end-n_burnin,opts.niterations))
         sampler.run(end-start)
 
-# Moved this section out of for-loop to speed things up
-# write new samples
-with InferenceFile(opts.output_file, "a") as fp:
-    logging.info("Writing results to file")
-    sampler.write_results(fp, max_iterations=opts.niterations+n_burnin)
-    # compute the acls and write
-    logging.info("Computing acls")
-    sampler.write_acls(fp, sampler.compute_acls(fp))
-    # compute evidence, if supported
-    try:
-        lnz, dlnz = sampler.calculate_logevidence(fp)
-        logging.info("Saving evidence")
-        sampler.write_logevidence(fp, lnz, dlnz)
-    except NotImplementedError:
-        pass
+	# write new samples
+        with InferenceFile(opts.output_file, "a") as fp:
+
+            logging.info("Writing results to file")
+            sampler.write_results(fp, max_iterations=opts.niterations+n_burnin)
+
+            if not opts.checkpoint_fast or end == opts.niterations:
+                # compute the acls and write
+    	        logging.info("Computing acls")
+                sampler.write_acls(fp, sampler.compute_acls(fp))
+                # compute evidence, if supported
+                try:
+                    lnz, dlnz = sampler.calculate_logevidence(fp)
+                    logging.info("Saving evidence")
+                    sampler.write_logevidence(fp, lnz, dlnz)
+                except NotImplementedError:
+                    pass
 
 # exit
 logging.info("Done")
