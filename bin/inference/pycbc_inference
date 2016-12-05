@@ -70,7 +70,9 @@ parser.add_argument("--psd-start-time", type=float, default=None,
     help="Start time to use for PSD estimation if different from analysis.")
 parser.add_argument("--psd-end-time", type=float, default=None,
     help="End time to use for PSD estimation if different from analysis.")
-parser.add_argument("--snr", type=str, default='oldsnr')
+
+parser.add_argument("--snr-mode", type=str, default='oldsnr')
+parser.add_argument("--psd-scale-factor", type=float, default=1.)
 
 # add inference options
 parser.add_argument("--likelihood-evaluator", required=True,
@@ -231,11 +233,13 @@ with ctx:
                         delta_f=delta_f_dict.values()[0], **static_args)
 
     # construct class that will return the natural logarithm of likelihood
-    logging.info("Log likelihood will be calculated using " + str(opts.snr))
+    logging.info("Log likelihood will be calculated using " + str(opts.snr_mode))
+    logging.info("Using PSD scaling factor " + str(opts.psd_scale_factor))
+
     likelihood = inference.likelihood_evaluators[opts.likelihood_evaluator](
                         generator, stilde_dict, opts.low_frequency_cutoff,
                         psds=psd_dict, psd_dyn=psd_dyn_dict, prior=prior,
-			snr=opts.snr)
+			snr_mode=opts.snr_mode, psdsf=opts.psd_scale_factor)
 
     # create sampler that will run
     sampler = option_utils.sampler_from_cli(opts, likelihood)

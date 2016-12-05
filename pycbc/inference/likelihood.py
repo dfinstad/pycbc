@@ -27,9 +27,10 @@ for parameter estimation.
 """
 
 from pycbc import filter, waveform
-from pycbc.vetoes import power_chisq
+from pycbc.vetoes import power_chisq_bins, power_chisq_from_precomputed
 from pycbc.events import newsnr
-from pycbc.types import Array
+from pycbc.types import Array, zeros
+from pycbc.filter import matched_filter_core
 import numpy
 
 def _noprior(params):
@@ -412,7 +413,8 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
     name = 'gaussian'
 
     def __init__(self, waveform_generator, data, f_lower, psds=None,
-            psd_dyn=None, snr=None, f_upper=None, norm=None, prior=None, return_meta=True):
+                 psd_dyn=None, psdsf=None, snr_mode=None, f_upper=None,
+                 norm=None, prior=None, return_meta=True):
         # set up the boiler-plate attributes; note: we'll compute the
         # log evidence later
         super(GaussianLikelihood, self).__init__(waveform_generator, data,
@@ -445,11 +447,13 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
 	# psd with dyn_range_fac applied, for use in chisq weighting in loglr
 	if psd_dyn:
 	    self._psd_dyn_dict = psd_dyn
-	# try to set flag for determing if newsnr should be used
-	if snr == 'newsnr':
-	    self._snr = snr
+	# set flag for snr mode
+	if snr_mode == 'newsnr':
+	    self._snr_mode = snr_mode
 	else:
-	    self._snr = None
+	    self._snr_mode = None
+        # pass in scaling factor for PSD to use in newsnr calc
+        self._psdsf = psdsf
         # whiten the data
         for det in self._data:
             self._data[det][kmin:kmax] *= self._weight[det][kmin:kmax]
@@ -484,59 +488,36 @@ class GaussianLikelihood(_BaseLikelihoodEvaluator):
         for det,h in self._waveform_generator.generate(*params).items():
             # the kmax of the waveforms may be different than internal kmax
             kmax = min(len(h), self._kmax)
-	    
-	    ############# stuff added for chisq weighting ######################  
-	    #chisq_bins = 16.
-
-	    # whitened data
-	    #stilde = self.data[det][self._kmin:kmax]
-
-	    # psd with dyn_range_fac already applied
-	    #psd_series = self._psd_dyn_dict[det][self._kmin:kmax]
 
 	    # whitening of the template waveform
 	    h[self._kmin:kmax] *= self._weight[det][self._kmin:kmax]
 
-	    # using a factor of 1e4 here just to make the numbers look right
-	    #chisq, raw_bin = power_chisq(h[self._kmin:kmax], stilde, chisq_bins,
-            #                                    psd_series*1e4, return_bins=True)
-	    #chisq /= chisq_bins * 2 - 2
-	    #t = self._waveform_generator.current_params['tc']
-	    #t_index = int((t - h.epoch) * chisq.sample_rate)
-
-	    # diagnostic info
-	    #print 'Template length:', len(h)
-	    #print 'kmin =', self._kmin
-	    #print 'kmax = min(len(h), self._kmax) =', kmax
-	    #print 'Waveform generator time (tc):', t
-	    #print 'GPS start time:', h.epoch
-	    #print 'Length of chisq time-series:', len(chisq)
-	    #print 'Calculated index for chisq time-series:', t_index
-	    #print 'Chisq start/end times:', chisq.start_time, chisq.end_time
-	    #print 'h/stilde delta_f:', h.delta_f, stilde.delta_f
-	    #print 'h sample freqs:', h.sample_frequencies
-	    #print 'stilde sample freqs:', stilde.sample_frequencies
-	    #print '#############################################'
 	    snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
-	    #print 'SNR:', snr_term
-	    if self._snr:
-		chisq_bins = 16.
+
+            # if newsnr mode is set, calculate chisq and weight snr term
+	    if self._snr_mode:
+		chisq_bins = 16
 		stilde = self.data[det][self._kmin:kmax]
+                htilde = h[self._kmin:kmax]
 		psd_series = self._psd_dyn_dict[det][self._kmin:kmax]
-		chisq, _ = power_chisq(h[self._kmin:kmax], stilde, chisq_bins,
-				       psd_series*1e4, return_bins=True)
+
+                bins = power_chisq_bins(htilde, chisq_bins, psd_series*self._psdsf,
+                                        low_frequency_cutoff=self._f_lower)
+
+                corra = zeros((len(htilde)-1)*2, dtype=htilde.dtype)
+
+                total_snr, corr, tnorm = matched_filter_core(htilde, stilde,
+                                                             psd=psd_series*self._psdsf,
+                                                             low_frequency_cutoff=self._f_lower,
+                                                             corr_out=corra)
+
+                t = self._waveform_generator.current_params['tc']
+                t_index = int((t - h.epoch) * total_snr.sample_rate)
+                chisq = power_chisq_from_precomputed(corr, total_snr, tnorm, bins,
+                                                     indices=Array(t_index))
 		chisq /= chisq_bins * 2 - 2
-		t = self._waveform_generator.current_params['tc']
-		t_index = int((t - h.epoch) * chisq.sample_rate)
-	        #snr_term = self.data[det][self._kmin:kmax].inner(h[self._kmin:kmax]).real
-	  	#print 'SNR:', snr_term
-	        snr_term = newsnr(snr_term, chisq[t_index], q=6., n=2.)
-		#print 'newSNR:', snr_term
-		#print 'Reduced chisq:', chisq[t_index]
-	    #print 'Reduced chisq:', chisq[t_index]
-	    #print '##############'
-	    #print 'SNR and newSNR:', snr_term, new_snr_term
-	    #######################################################################
+
+	        snr_term = newsnr(snr_term, chisq[0])
 
             lr += (
                 # <h, d>
