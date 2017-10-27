@@ -363,3 +363,58 @@ class Recalibrate(object):
                               kappa_pu_re=calib_args[6],
                               kappa_pu_im=calib_args[7])
         return strain_adjusted
+
+class FullCalibration(Recalibrate):
+    name = 'full_model'
+    def __init__(self, freq=None, fc0=None, c0=None, d0=None,
+                 a_tst0=None, a_pu0=None, fs0=None, qinv0=None,
+                 tau_c0=None, tau_a0=None):
+        super(FullCalibration, self).__init__(freq, fc0, c0, d0, a_tst0,
+            a_pu0, fs0, qinv0)
+
+        self.tau_c0 = float(tau_c0)
+        self.tau_a0 = float(tau_a0)
+
+        # initial detuning at time t0
+        init_detuning = self.freq**2 / (self.freq**2 - 1.0j * self.freq * \
+                                        self.fs0 * self.qinv0 + self.fs0**2)
+
+        # residual of c0 after factoring out the coupled cavity pole fc0
+        # now this is only the INITIAL residual sensing function. will need to
+        # calculate a new one with every update of c since the delay times will
+        # change
+        self.c_res0 = self.c0 * (1 + 1.0j * self.freq / self.fc0) / init_detuning
+
+    def update_c(self, kappa_c=None, fc=None, fs=None, qinv=None, tau_c=None,
+                 h_c=None):
+        """Need to update c_res now.
+        Parameters
+        ----------
+        h_c is the optical gain
+        """
+
+        c_res_update = numpy.exp(-2.0j * numpy.pi * self.freq * tau_c)
+        c_res = self.c_res0 * c_res_update
+
+        detuning_term = self.freq**2 / (self.freq**2 - 1.0j *self.freq*fs * \
+                                        qinv + fs**2)
+
+        return h_c * c_res * kappa_c / (1 + 1.0j * self.freq/fc) * detuning_term
+
+    def update_g(self, kappa_c=None, kappa_tst_re=None, kappa_tst_im=None,
+                 kappa_pu_re=None, kappa_pu_im=None, fs=None, fc=None
+                 qinv=None, tau_c=None, tau_a=None, h_c=None):
+        """Need to update a_tst and a_pu calculations.
+        """
+        c = self.update_c(kappa_c=kappa_c, fc=fc, fs=fs, qinv=qinv, tau_c=tau_c,
+                          h_c=h_c)
+
+        act_delay = numpy.exp(-2.0j * numpy.pi * self.freq * tau_a)
+
+        a_tst = self.a_tst0 * (kappa_tst_re + 1.0j * kappa_tst_im) * act_delay
+        a_pu = self.a_pu0 * (kappa_pu_re + 1.0j * kappa_pu_im) * act_delay
+
+        return c * self.d0 * (a_tst + a_pu)
+
+    def update_r(self):
+        return
