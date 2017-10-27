@@ -403,7 +403,8 @@ class FullCalibration(Recalibrate):
 
     def update_g(self, kappa_c=None, kappa_tst_re=None, kappa_tst_im=None,
                  kappa_pu_re=None, kappa_pu_im=None, fs=None, fc=None
-                 qinv=None, tau_c=None, tau_a=None, h_c=None):
+                 qinv=None, tau_c=None, tau_a=None, h_c=None, h_t=None,
+                 h_p=None):
         """Need to update a_tst and a_pu calculations.
         """
         c = self.update_c(kappa_c=kappa_c, fc=fc, fs=fs, qinv=qinv, tau_c=tau_c,
@@ -411,10 +412,19 @@ class FullCalibration(Recalibrate):
 
         act_delay = numpy.exp(-2.0j * numpy.pi * self.freq * tau_a)
 
-        a_tst = self.a_tst0 * (kappa_tst_re + 1.0j * kappa_tst_im) * act_delay
-        a_pu = self.a_pu0 * (kappa_pu_re + 1.0j * kappa_pu_im) * act_delay
+        a_tst = h_t * self.a_tst0 * (kappa_tst_re + 1.0j * kappa_tst_im) * act_delay
+        a_pu = h_p *self.a_pu0 * (kappa_pu_re + 1.0j * kappa_pu_im) * act_delay
 
         return c * self.d0 * (a_tst + a_pu)
 
-    def update_r(self):
-        return
+    def update_r(self, fs=None, qinv=None, fc=None, h_c=None, h_t=None,
+                 h_p=None, tau_c=None, tau_a=None, kappa_c=None,
+                 kappa_tst_re=None, kappa_tst_im=None, kappa_pu_re=None,
+                 kappa_pu_im=None):
+        c = self.update_c(kappa_c=kappa_c, fc=fc, fs=fs, qinv=qinv, tau_c=tau_c,
+                          h_c=h_c)
+        g = self.update_g(fs=fs, qinv=qinv, fc=fc, kappa_c=kappa_c, h_c=h_c,
+                          kappa_tst_re=kappa_tst_re, tau_c=tau_c, h_t=h_t,
+                          kappa_tst_im=kappa_tst_im, tau_a=tau_a, h_p=h_p,
+                          kappa_pu_re=kappa_pu_re, kappa_pu_im=kappa_pu_im)
+        return (1.0 + g) / c
