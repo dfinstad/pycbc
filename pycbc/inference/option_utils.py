@@ -25,6 +25,7 @@ from pycbc.io.record import FieldArray
 from pycbc.inference import burn_in
 from pycbc import conversions
 from pycbc import transforms
+from pycbc.calibration import Spline
 from pycbc.distributions import bounded
 from pycbc.distributions import constraints
 from pycbc.io.inference_hdf import InferenceFile, check_integrity
@@ -462,6 +463,18 @@ def data_from_cli(opts):
     # get strain time series
     strain_dict = strain_from_cli_multi_ifos(opts, opts.instruments,
                                              precision="double")
+
+    # CALIBRATION TEST SECTION
+    if hasattr(opts, 'spline_ce_seed') and opts.spline_ce_seed:
+        for ifo in opts.instruments:
+            logging.info("Initializing spline calibration model for {} using seed {}".format(ifo, opts.spline_ce_seed))
+            spline_cal = Spline(opts, opts.spline_ce_seed, ifo)
+            logging.info("Applying calibration error to {} strain".format(ifo))
+            stilde = strain_dict[ifo].to_frequencyseries()
+            adjusted_strain = spline_cal.map_to_adjust(stilde)
+            strain_dict[ifo] = adjusted_strain.to_timeseries(delta_t=strain_dict[ifo].delta_t)
+    # END TEST SECTION
+
     # apply gates if not waiting to overwhiten
     if not opts.gate_overwhitened:
         logging.info("Applying gates to strain data")

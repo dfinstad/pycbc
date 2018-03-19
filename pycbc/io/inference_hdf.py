@@ -402,7 +402,7 @@ class InferenceFile(h5py.File):
         """
         group = self.sampler_group if group is None else group
         dataset_name = "/".join([group, "random_state"])
-        arr = self[dataset_name][:]
+        arr = self[dataset_name][:].astype(numpy.int64)
         s = self[dataset_name].attrs["s"]
         pos = self[dataset_name].attrs["pos"]
         has_gauss = self[dataset_name].attrs["has_gauss"]

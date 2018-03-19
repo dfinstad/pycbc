@@ -17,6 +17,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 import numpy
+import os
 from scipy.interpolate import UnivariateSpline
 from pycbc.types import FrequencySeries
 
@@ -363,3 +364,75 @@ class Recalibrate(object):
                               kappa_pu_re=calib_args[6],
                               kappa_pu_im=calib_args[7])
         return strain_adjusted
+
+class Spline(object):
+    name = "spline"
+    def __init__(self, opts, seed, ifo):
+        # seed generator
+        numpy.random.seed(seed)
+        instruments = [i.lower() for i in opts.instruments]
+        ifo_seeds = {i: s for i, s in
+                     zip(instruments,
+                         numpy.random.randint(1e6, size=len(opts.instruments)))}
+        numpy.random.seed(ifo_seeds[ifo.lower()])
+        # define points evenly distributed in log frequency
+        self.freq = numpy.logspace(numpy.log10(5), numpy.log10(5000), 15)
+        # specify frequency bins
+        f_bins = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+        # specify O2 amplitude uncertainty center-values and widths (eyeballed
+        # from figure 9 of https://arxiv.org/pdf/1708.03023.pdf)
+        if ifo.lower() == "h1":
+            amp_budget = [(0.02, 0.085), (0.01, 0.043), (-0.005, 0.05),
+                          (-0.01, 0.055), (0.015, 0.1), (0.032, 0.075),
+                          (0.042, 0.095), (0.054, 0.132), (0.055, 0.15)]
+            phase_budget = [(1.0, 4.2), (0.0, 2.0), (-0.3, 1.5), (0.8, 3.5),
+                            (2.3, 6.5), (2.0, 4.0), (1.5, 3.0), (1.8, 3.7),
+                            (0.4, 6.8)]
+        elif ifo.lower()  == "l1":
+            amp_budget = [(-0.025, 0.15), (-0.055, 0.118), (0.013, 0.05),
+                          (0.002, 0.043), (0.0, 0.04), (0.0, 0.07),
+                          (-0.001, 0.078), (-0.012, 0.092), (-0.004, 0.132)]
+            phase_budget = [(-1.7, 10.7), (0.5, 6.4), (0.5, 3.0), (0.0, 2.0),
+                            (0.0, 2.0), (-0.3, 3.5), (-0.3, 2.5), (-0.5, 3.0),
+                            (-1.6, 4.2)]
+        else:
+            # FIXME get a real uncertainty budget for V1 maybe?
+            amp_budget = [(0.0, 0.1), (0.0, 0.1), (0.0, 0.1), (0.0, 0.1),
+                          (0.0, 0.1), (0.0, 0.1), (0.0, 0.1), (0.0, 0.1),
+                          (0.0, 0.1)]
+            phase_budget = [(0.0, 5.0), (0.0, 5.0), (0.0, 5.0), (0.0, 5.0),
+                            (0.0, 5.0), (0.0, 5.0), (0.0, 5.0), (0.0, 5.0),
+                            (0.0, 5.0)]
+        # make draws from uncertainty budget for frequency points
+        amp_errs, phase_errs = [], []
+        for f in self.freq:
+            for i in range(len(f_bins)):
+                if f <= f_bins[i] or i == len(f_bins) - 1:
+                    a = numpy.random.normal(loc=1.0+amp_budget[i][0],
+                                            scale=amp_budget[i][1])
+                    p_deg = numpy.random.normal(loc=phase_budget[i][0],
+                                                scale=phase_budget[i][1])
+                    p_rad = p_deg * numpy.pi / 180.
+                    amp_errs.append(a)
+                    phase_errs.append(p_rad)
+                    break
+
+        # generate calibration error realization
+        self.amp_coeffs = numpy.polyfit(self.freq, amp_errs, 7)
+        self.phase_coeffs = numpy.polyfit(self.freq, phase_errs, 7)
+
+    def map_to_adjust(self, strain, **params):
+        f = strain.sample_frequencies
+        k_amp = numpy.polyval(self.amp_coeffs, f)
+        k_phase = numpy.polyval(self.phase_coeffs, f)
+        k = k_amp * numpy.exp(1.0j * k_phase)
+
+        adjusted_strain = FrequencySeries(strain.numpy() * k,
+                                          delta_f=strain.delta_f,
+                                          epoch=strain.epoch)
+        return adjusted_strain
+
+    @classmethod
+    def from_config(cls, cp, ifo, section):
+        seed = int(cp.get_opt_tag(section, '-'.join([ifo, "seed"]), None))
+        return cls(seed, ifo)
