@@ -421,9 +421,6 @@ class Spline(object):
         self.amp_coeffs = numpy.polyfit(self.freq, amp_errs, 7)
         self.phase_coeffs = numpy.polyfit(self.freq, phase_errs, 7)
 
-        # reset random seed to the one specified at pycbc_inference level
-        numpy.random.seed(opts.seed)
-
     def map_to_adjust(self, strain, **params):
         f = strain.sample_frequencies
         k_amp = numpy.polyval(self.amp_coeffs, f)

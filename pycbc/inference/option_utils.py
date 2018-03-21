@@ -18,6 +18,7 @@
 """
 
 import logging
+import numpy
 import shutil
 import pycbc.inference.sampler
 from pycbc import inject
@@ -473,6 +474,8 @@ def data_from_cli(opts):
             stilde = strain_dict[ifo].to_frequencyseries()
             adjusted_strain = spline_cal.map_to_adjust(stilde)
             strain_dict[ifo] = adjusted_strain.to_timeseries(delta_t=strain_dict[ifo].delta_t)
+        # reset random seed to one set at pycbc_inference level
+        numpy.random.seed(opts.seed)
     # END TEST SECTION
 
     # apply gates if not waiting to overwhiten
