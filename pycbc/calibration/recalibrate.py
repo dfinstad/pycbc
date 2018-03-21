@@ -368,7 +368,7 @@ class Recalibrate(object):
 class Spline(object):
     name = "spline"
     def __init__(self, opts, seed, ifo):
-        # seed generator
+        # seed generator for calibration
         numpy.random.seed(seed)
         instruments = [i.lower() for i in opts.instruments]
         ifo_seeds = {i: s for i, s in
@@ -420,6 +420,9 @@ class Spline(object):
         # generate calibration error realization
         self.amp_coeffs = numpy.polyfit(self.freq, amp_errs, 7)
         self.phase_coeffs = numpy.polyfit(self.freq, phase_errs, 7)
+
+        # reset random seed to the one specified at pycbc_inference level
+        numpy.random.seed(opts.seed)
 
     def map_to_adjust(self, strain, **params):
         f = strain.sample_frequencies
