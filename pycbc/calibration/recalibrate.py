@@ -430,9 +430,67 @@ class Spline(object):
         adjusted_strain = FrequencySeries(strain.numpy() * k,
                                           delta_f=strain.delta_f,
                                           epoch=strain.epoch)
+        # diagnostic plotting
+        fig, ax = plt.subplots(2, 1, figsize=(8, 12))
+        ax[0].plot(f, k_amp)
+        ax[1].plot(f, k_phase)
+        ax[0].set(ylim=(0.9, 1.1))
+        ax[1].set(ylim=(-10, 10))
+        fig.savefig('/home/daniel.finstad/secure_html/gw170817_pe/{}_envelope_bounds.png'.format(self.ifo), dpi=150, bbox_inches="tight")
         return adjusted_strain
 
     @classmethod
     def from_config(cls, cp, ifo, section):
         seed = int(cp.get_opt_tag(section, '-'.join([ifo, "seed"]), None))
         return cls(seed, ifo)
+
+class SplineEnvelope(Spline):
+    """This will make a rough fit to the all-of-O2 uncertainty budget
+    1-sigma envelope boundaries covering 68% of the run. This is not the same
+    as the Spline class, which creates a specific realization enclosed by the
+    envelope. The purpose here is to generate a worst-case error.
+    """
+    name = "spline_envelope"
+    def __init__(self, ifo, opts):
+        self.ifo = ifo
+        amp_bound = opts.amp_bound
+        phase_bound = opts.phase_bound
+        fit_freqs = [20, 50, 100, 200, 500, 1000, 2000, 5000]
+        # amp bounds in percentages differences from zero
+        amp_bounds = {
+            "h1": {"upper": tuple(1.6, 1.2, 1., 4.5, 4.8, 6.2, 7.2, 8.),
+                   "lower": tuple(-1.25, -2.1, -2.55, 0.8, 0.9, 1., 0.9,
+                                  0.)},
+            "l1": {"upper": tuple(3.75, 2., 1.1, 1., 0., -0.2, 0.1, 1.3),
+                   "lower": tuple(-1.2, -1.2, -1.9, -1.6, -3.3, -4., -5.,
+                                  -6.3)},
+            "v1": {"upper": tuple([10.] * len(fit_freqs)),
+                   "lower": tuple([-10.] * len(fit_freqs))}}
+        # phase bounds in degrees difference from zero
+        phase_bounds = {
+            "h1": {"upper": tuple(0.2, 0.8, 1.5, 2.7, 2.3, 2.3, 2.5, 3.8),
+                   "lower": tuple(-1., -1., -0.1, 0.8, 0.6, 0., -1.1, -2.9)},
+            "l1": {"upper": tuple(2., 0.8, 0.5, 0.1, -0.1, 0., 0.1, 0.1),
+                   "lower": tuple(-1., -1.1, -1., -1.15, -1.5, -1.6, -2., -3.7)},
+            "v1": {"upper": tuple([10.] * len(fit_freqs)),
+                   "lower": tuple([-10.] * len(fit_freqs))}}
+        order = 4
+        amp_errs = numpy.array([1.+a/100. for a in amp_bounds[ifo][amp_bound]])
+        self.amp_coeffs = numpy.polyfit(fit_freqs, amp_errs, order)
+        if not phase_bound == "zero":
+            phase_errs = numpy.array(phase_bounds[ifo][phase_bound]) \
+                         * numpy.pi/180.
+            self.phase_coeffs = numpy.polyfit(fit_freqs, phase_errs, order)
+        else:
+            phase_errs = numpy.array([0.0] * len(fit_freqs))
+            self.phase_coeffs = numpy.polyfit(fit_freqs, phase_errs, 1)
+
+    #@classmethod
+    #def from_config(cls, cp, ifo, section):
+    #    """amp_bound valid options will be "upper" or "lower", while
+    #    phase_bound will accept these and also "zero" to apply zero phase
+    #    error.
+    #    """
+    #    amp_bound = cp.get_opt_tag(section, "amp-bound", None)
+    #    phase_bound = cp.get_opt_tag(section, "phase-bound", None)
+    #    return cls(ifo, amp_bound=amp_bound, phase_bound=phase_bound)

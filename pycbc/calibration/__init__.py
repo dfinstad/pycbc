@@ -2,7 +2,8 @@ from pycbc.calibration.recalibrate import Recalibrate, Spline
 
 models = {
     Recalibrate.name : Recalibrate,
-    Spline.name : Spline
+    Spline.name : Spline,
+    SplineEnvelope.name : SplineEnvelope
 }
 
 def read_model_from_config(cp, ifo, section="calibration"):

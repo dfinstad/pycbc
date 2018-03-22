@@ -117,9 +117,14 @@ parser.add_argument("--checkpoint-fast", action="store_true",
                     help="Do not calculate ACL after each checkpoint, only at "
                          "the end. Not applicable if n-independent-samples "
                          "have been specified.")
+### HACK ARGS ###
 parser.add_argument("--spline-ce-seed", type=int,
                     help="Enable the spline calibration error model. This arg "
                          "should be TEMPORARY.")
+parser.add_argument("--amp-bound", type=str,
+                    help="'upper' or 'lower'")
+parser.add_argument("--phase-bound", type=str,
+                    help="'upper', 'lower', or 'zero'")
 
 # verbose option
 parser.add_argument("--verbose", action="store_true", default=False,
