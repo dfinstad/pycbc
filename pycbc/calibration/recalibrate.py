@@ -20,7 +20,6 @@ import numpy
 import os
 from scipy.interpolate import UnivariateSpline
 from pycbc.types import FrequencySeries
-from matplotlib import pyplot as plt
 
 class Recalibrate(object):
     """ Class for adjusting time-varying calibration parameters of given
