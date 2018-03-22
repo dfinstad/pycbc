@@ -1,4 +1,4 @@
-from pycbc.calibration.recalibrate import Recalibrate, Spline
+from pycbc.calibration.recalibrate import Recalibrate, Spline, SplineEnvelope
 
 models = {
     Recalibrate.name : Recalibrate,

@@ -472,7 +472,7 @@ def data_from_cli(opts):
             #logging.info("Initializing spline calibration model for {} using seed {}".format(ifo, opts.spline_ce_seed))
             logging.info("Initializing spline envelope calibration for {}".format(ifo))
             #spline_cal = Spline(opts, opts.spline_ce_seed, ifo)
-            spline_cal = SplineEnvelope(ifo, opts)
+            spline_cal = SplineEnvelope(ifo.lower(), opts)
             logging.info("Applying calibration error to {} strain".format(ifo))
             stilde = strain_dict[ifo].to_frequencyseries()
             adjusted_strain = spline_cal.map_to_adjust(stilde)
