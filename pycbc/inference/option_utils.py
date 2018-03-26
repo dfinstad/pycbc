@@ -462,6 +462,17 @@ def data_from_cli(opts):
     # get strain time series
     strain_dict = strain_from_cli_multi_ifos(opts, opts.instruments,
                                              precision="double")
+
+    # apply calibration error
+    if hasattr(opts, 'amp_bound') and opts.amp_bound:
+        for ifo in opts.instruments:
+            logging.info("Initializing spline envelope calibration for {}".format(ifo))
+            spline_cal = SplineEnvelope(ifo.lower(), opts)
+            logging.info("Applying calibration error to {} strain".format(ifo))
+            stilde = strain_dict[ifo].to_frequencyseries()
+            adjusted_strain = spline_cal.map_to_adjust(stilde)
+            strain_dict[ifo] = adjusted_strain.to_timeseries(delta_t=strain_dict[ifo].delta_t)
+
     # apply gates if not waiting to overwhiten
     if not opts.gate_overwhitened:
         logging.info("Applying gates to strain data")
