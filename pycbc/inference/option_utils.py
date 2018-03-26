@@ -25,6 +25,7 @@ from pycbc.io.record import FieldArray
 from pycbc.inference import burn_in
 from pycbc import conversions
 from pycbc import transforms
+from pycbc.calibration import SplineEnvelope
 from pycbc.distributions import bounded
 from pycbc.distributions import constraints
 from pycbc.io.inference_hdf import InferenceFile, check_integrity
