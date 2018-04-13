@@ -371,8 +371,17 @@ class SplineEnvelope(object):
     name = "spline_envelope"
     def __init__(self, ifo, opts):
         self.ifo = ifo
-        amp_bound = opts.amp_bound
-        phase_bound = opts.phase_bound
+        if len(opts.amp_bound.split()) > 1:
+            print("Using differential calibration error")
+            amp_bound = {i.lower(): b for i, b in
+                         [s.split(':') for s in opts.amp_bound.split()]}[ifo]
+            phase_bound = {i.lower(): b for i, b in
+                           [s.split(':') for s in opts.phase_bound.split()]}[ifo]
+            print("{} using {} amp bound and {} phase bound".format(ifo.upper(), amp_bound, phase_bound))
+        else:
+            print("Using universal calibration error")
+            amp_bound = opts.amp_bound
+            phase_bound = opts.phase_bound
         fit_freqs = [20, 50, 100, 200, 500, 1000, 2000, 5000]
         # amp bounds in percentages differences from zero
         amp_bounds = {
