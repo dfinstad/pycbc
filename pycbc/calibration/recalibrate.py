@@ -401,13 +401,16 @@ class SplineEnvelope(object):
                    "lower": tuple([-1., -1.1, -1., -1.15, -1.5, -1.6, -2., -3.7])},
             "v1": {"upper": tuple([10.] * len(fit_freqs)),
                    "lower": tuple([-10.] * len(fit_freqs))}}
-        amp_errs = numpy.array([1.+a/100. for a in amp_bounds[ifo][amp_bound]])
-        self.amp_spline = UnivariateSpline(fit_freqs, amp_errs, k=1, s=0)
+        if not amp_bound == "zero":
+            amp_errs = numpy.array([1.+a/100. for a in amp_bounds[ifo][amp_bound]])
+        else:
+            amp_errs = numpy.array([1.0] * len(fit_freqs))
         if not phase_bound == "zero":
             phase_errs = numpy.array(phase_bounds[ifo][phase_bound]) \
                          * numpy.pi/180.
         else:
             phase_errs = numpy.array([0.0] * len(fit_freqs))
+        self.amp_spline = UnivariateSpline(fit_freqs, amp_errs, k=1, s=0)
         self.phase_spline = UnivariateSpline(fit_freqs, phase_errs, k=1, s=0)
 
     def map_to_adjust(self, strain, **params):
