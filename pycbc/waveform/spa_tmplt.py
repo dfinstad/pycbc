@@ -24,7 +24,7 @@
 from math import sqrt, log
 import numpy, lal, lalsimulation, pycbc.pnutils
 from pycbc.scheme import schemed
-from pycbc.types import FrequencySeries, Array, complex64, float32, zeros
+from pycbc.types import FrequencySeries, Array, complex64, float32, zeros, complex_same_precision_as
 from pycbc.waveform.utils import ceilpow2
 
 def findchirp_chirptime(m1, m2, fLower, porder):
@@ -228,3 +228,94 @@ def spa_tmplt(**kwds):
                      pfa6, pfl6, pfa7, amp_factor)
     return htilde
 
+def spa_tmplt_nrtidal(**kwds):
+    """ Generate a TaylorF2 waveform with the NRTidal terms from lalsuite added.
+    """
+    # Pull out the input arguments
+    f_lower = kwds['f_lower']
+    delta_f = kwds['delta_f']
+    distance = kwds['distance']
+    mass1 = kwds['mass1']
+    mass2 = kwds['mass2']
+    s1z = kwds['spin1z']
+    s2z = kwds['spin2z']
+    lambda1 = kwds['lambda1']
+    lambda2 = kwds['lambda2']
+    phase_order = int(kwds['phase_order'])
+    #amplitude_order = int(kwds['amplitude_order'])
+    spin_order = int(kwds['spin_order'])
+
+    if 'out' in kwds:
+        out = kwds['out']
+    else:
+        out = None
+
+    amp_factor = spa_amplitude_factor(mass1=mass1, mass2=mass2) / distance
+
+    lal_pars = lal.CreateDict()
+    if phase_order != -1:
+        lalsimulation.SimInspiralWaveformParamsInsertPNPhaseOrder(
+            lal_pars, phase_order)
+
+    if spin_order != -1:
+        lalsimulation.SimInspiralWaveformParamsInsertPNSpinOrder(
+            lal_pars, spin_order)
+
+    #Calculate the PN terms
+    phasing = lalsimulation.SimInspiralTaylorF2AlignedPhasing(
+                                    float(mass1), float(mass2),
+                                    float(s1z), float(s2z),
+                                    lal_pars)
+
+    pfaN = phasing.v[0]
+    pfa2 = phasing.v[2] / pfaN
+    pfa3 = phasing.v[3] / pfaN
+    pfa4 = phasing.v[4] / pfaN
+    pfa5 = phasing.v[5] / pfaN
+    pfa6 = (phasing.v[6] - phasing.vlogv[6] * log(4)) / pfaN
+    pfa7 = phasing.v[7] / pfaN
+
+    pfl5 = phasing.vlogv[5] / pfaN
+    pfl6 = phasing.vlogv[6] / pfaN
+
+    piM = lal.PI * (mass1 + mass2) * lal.MTSUN_SI
+
+    kmin = int(f_lower / float(delta_f))
+
+    vISCO = 1. / sqrt(6.)
+    fISCO = vISCO * vISCO * vISCO / piM
+    kmax = int(fISCO / delta_f)
+    f_max = ceilpow2(fISCO)
+    n = int(f_max / delta_f) + 1
+
+    if not out:
+        htilde = FrequencySeries(zeros(n, dtype=numpy.complex64), delta_f=delta_f, copy=False)
+    else:
+        if type(out) is not Array:
+            raise TypeError("Output must be an instance of Array")
+        if len(out) < kmax:
+            kmax = len(out)
+        if out.dtype != complex64:
+            raise TypeError("Output array is the wrong dtype")
+        htilde = FrequencySeries(out, delta_f=delta_f, copy=False)
+
+    spa_tmplt_engine(htilde[kmin:kmax], kmin, phase_order, delta_f, piM, pfaN,
+                     pfa2, pfa3, pfa4, pfa5, pfl5,
+                     pfa6, pfl6, pfa7, amp_factor)
+
+    # add NRTidal from lalsimulation
+    phi_tidal = numpy.zeros(len(htilde))
+    amp_tidal = numpy.zeros(len(htilde))
+    fhz = htilde.sample_frequencies.numpy()
+    msun = 1.989e30 # conversion to kg is necessary for the TunedTides function
+    m1_SI = mass1 * msun
+    m2_SI = mass2 * msun
+    lalsimulation.SimNRTunedTidesFDTidalPhaseFrequencySeries(
+        phi_tidal, amp_tidal, fhz, float(m1_SI), float(m2_SI),
+        float(lambda1), float(lambda2))
+    htilde_tidal = FrequencySeries(htilde.numpy() * amp_tidal \
+                                   * numpy.exp(-1.0j * phi_tidal),
+                                   delta_f=htilde.delta_f,
+                                   dtype=complex_same_precision_as(htilde))
+
+    return htilde_tidal
