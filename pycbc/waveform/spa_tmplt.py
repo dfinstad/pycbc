@@ -24,7 +24,7 @@
 from math import sqrt, log
 import numpy, lal, lalsimulation, pycbc.pnutils
 from pycbc.scheme import schemed
-from pycbc.types import FrequencySeries, Array, complex64, float32, zeros, complex_same_precision_as
+from pycbc.types import FrequencySeries, Array, complex64, float32, zeros
 from pycbc.waveform.utils import ceilpow2
 
 def findchirp_chirptime(m1, m2, fLower, porder):
@@ -316,6 +316,6 @@ def spa_tmplt_nrtidal(**kwds):
     htilde_tidal = FrequencySeries(htilde.numpy() * amp_tidal \
                                    * numpy.exp(-1.0j * phi_tidal),
                                    delta_f=htilde.delta_f,
-                                   dtype=complex_same_precision_as(htilde))
+                                   dtype=numpy.complex64)
 
     return htilde_tidal
