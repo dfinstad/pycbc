@@ -39,7 +39,7 @@ from pycbc.filter import interpolate_complex_frequency, resample_to_delta_t
 import pycbc
 from spa_tmplt import spa_tmplt, spa_tmplt_norm, spa_tmplt_end, \
                       spa_tmplt_precondition, spa_amplitude_factor, \
-                      spa_length_in_time
+                      spa_length_in_time, spa_tmplt_nrtidal
 
 class NoWaveformError(Exception):
     """This should be raised if generating a waveform would just result in all
@@ -240,6 +240,9 @@ for approx_enum in xrange(0, lalsimulation.NumApproximants):
         approx_name = lalsimulation.GetStringFromApproximant(approx_enum)
         _lalsim_enum[approx_name] = approx_enum
         _lalsim_fd_approximants[approx_name] = _lalsim_fd_waveform
+
+### HACK TO ADD TAYLORF2_NRTIDAL ###
+_lalsim_fd_approximants['TaylorF2_NRTidal'] = spa_tmplt_nrtidal
 
 # sine-Gaussian burst
 for approx_enum in xrange(0, lalsimulation.NumApproximants):
