@@ -28,6 +28,7 @@ This modules provides a list of implemented samplers for parameter estimation.
 import numpy
 from pycbc.inference.sampler_kombine import KombineSampler
 from pycbc.inference.sampler_emcee import EmceeEnsembleSampler, EmceePTSampler
+from pycbc.inference.sampler_multinest import MultiNestSampler
 from pycbc.inference.sampler_mcmc import MCMCSampler
 
 # list of available samplers
@@ -36,4 +37,5 @@ samplers = {
     EmceeEnsembleSampler.name : EmceeEnsembleSampler,
     EmceePTSampler.name : EmceePTSampler,
     MCMCSampler.name : MCMCSampler,
+    MultiNestSampler.name : MultiNestSampler
 }

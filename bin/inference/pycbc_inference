@@ -290,6 +290,9 @@ with ctx:
                                 min_iterations=opts.min_burn_in)
 
     # create sampler that will run
+    # FIXME
+    if opts.sampler == 'multinest':
+        opts.prior_eval = prior_eval
     sampler = option_utils.sampler_from_cli(opts, likelihood)
 
     # check for backup file(s)
@@ -451,12 +454,14 @@ with ctx:
 
                 # compute the acls and write
                 acls = None
-                if opts.n_independent_samples is not None \
-                        or end >= get_nsamples \
-                        or not opts.checkpoint_fast:
-                    logging.info("Computing acls")
-                    acls = sampler.compute_acls(fp)
-                    sampler.write_acls(fp, acls)
+                # FIXME fix this hack that skips acls
+                if sampler.name != 'multinest':
+                    if opts.n_independent_samples is not None \
+                            or end >= get_nsamples \
+                            or not opts.checkpoint_fast:
+                        logging.info("Computing acls")
+                        acls = sampler.compute_acls(fp)
+                        sampler.write_acls(fp, acls)
 
         # write to backup
         with InferenceFile(backup_file, "a") as fp:
