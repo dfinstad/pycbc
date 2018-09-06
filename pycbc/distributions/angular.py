@@ -228,6 +228,15 @@ class SinAngle(UniformAngle):
             for bnd in self._bounds.values()])
         self._norm = numpy.exp(self._lognorm)
 
+    def _cdfinv(self, arg, value):
+        """Return inverse of cdf for mapping unit interval to parameter bounds.
+        """
+        scale = numpy.cos(self._bounds[arg][0]) - \
+                    numpy.cos(self._bounds[arg][1])
+        offset = 1. + numpy.cos(self._bounds[arg][1])/scale
+        new_value = numpy.arccos(-scale* (value - offset))
+        return new_value
+
     def _pdf(self, **kwargs):
         """Returns the pdf at the given values. The keyword arguments must
         contain all of parameters in self's params. Unrecognized arguments are
