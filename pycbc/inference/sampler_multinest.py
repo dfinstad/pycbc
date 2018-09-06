@@ -192,12 +192,16 @@ class MultiNestSampler(BaseMCMCSampler):
         """Map unit cube to priors.
         """
         dists = self.prior_eval.distributions
+        dist_dict = {a: d for a,d in zip(self.prior_eval.variable_args, dists)}
         bounds = [d.bounds for d in dists]
         transformed_cube = numpy.array(cube).copy()
         for i, p in enumerate(self.variable_args):
-            bound = [b for b in bounds if p in b][0]
-            scale = bound[p].max - bound[p].min
-            transformed_cube[i] = cube[i] * scale + bound[p].min
+            bound = dist_dict[p].bounds
+            if dist_dict[p].name == 'uniform':
+                scale = bound[p].max - bound[p].min
+                transformed_cube[i] = cube[i] * scale + bound[p].min
+            elif dist_dict[p].name == 'sin_angle':
+                transformed_cube[i] = dist_dict[p]._cdfinv(p, cube[i])
         return transformed_cube
 
     def loglike_for_cube(self, cube):
