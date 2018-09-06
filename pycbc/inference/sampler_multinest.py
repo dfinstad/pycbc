@@ -192,12 +192,12 @@ class MultiNestSampler(BaseMCMCSampler):
         """Map unit cube to priors.
         """
         dists = self.prior_eval.distributions
-        dist_dict = {a: d for a,d in zip(self.prior_eval.variable_args, dists)}
-        bounds = [d.bounds for d in dists]
+        dist_args = [d.params[0] for d in dists]
+        dist_dict = {a: d for a,d in zip(dist_args, dists)}
         transformed_cube = numpy.array(cube).copy()
         for i, p in enumerate(self.variable_args):
             bound = dist_dict[p].bounds
-            if dist_dict[p].name == 'uniform':
+            if dist_dict[p].name in ['uniform', 'uniform_angle']:
                 scale = bound[p].max - bound[p].min
                 transformed_cube[i] = cube[i] * scale + bound[p].min
             elif dist_dict[p].name == 'sin_angle':
