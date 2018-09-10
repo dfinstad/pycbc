@@ -321,6 +321,14 @@ class CosAngle(SinAngle):
     _arcfunc = numpy.arcsin
     _domainbounds = (-numpy.pi/2, numpy.pi/2)
 
+    def _cdfinv(self, param, value):
+        a = self._bounds[param][0]
+        b = self._bounds[param][1]
+        scale = numpy.sin(b) - numpy.sin(a)
+        offset = 1. - numpy.sin(b)/(numpy.sin(b) - numpy.sin(a))
+        new_value = numpy.arcsin((value - offset) * scale)
+        return new_value
+
 
 class UniformSolidAngle(bounded.BoundedDist):
     """A distribution that is uniform in the solid angle of a sphere. The names
