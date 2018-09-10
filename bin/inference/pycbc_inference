@@ -290,9 +290,14 @@ with ctx:
                                 min_iterations=opts.min_burn_in)
 
     # create sampler that will run
-    # FIXME
+    # FIXME this is an abomination
     if opts.sampler == 'multinest':
         opts.prior_eval = prior_eval
+        try:
+            with InferenceFile(opts.output_file+'.checkpoint', 'r') as fp:
+                opts.runcount = fp.attrs['runcount']
+        except:
+            opts.runcount = 0
     sampler = option_utils.sampler_from_cli(opts, likelihood)
 
     # check for backup file(s)
