@@ -32,7 +32,7 @@ import os
 import numpy
 from pycbc.inference.sampler_base import BaseMCMCSampler, _check_fileformat
 from pycbc.io import FieldArray
-from pycbc.io.inference_hdf import InferenceFile
+#from pycbc.io.inference_hdf import InferenceFile
 from pycbc.filter import autocorrelation
 from pymultinest import solve, Analyzer
 
@@ -64,7 +64,7 @@ class MultiNestSampler(BaseMCMCSampler):
 
     def __init__(self, likelihood_evaluator, nwalkers, pool=None,
                  likelihood_call=None, prior_eval=None, max_iter=0,
-                 total_iterations=0, output_file=None):
+                 total_iterations=0, output_file=None, runcount=0):
         try:
             import pymultinest
         except ImportError:
@@ -89,12 +89,13 @@ class MultiNestSampler(BaseMCMCSampler):
         self.likelihood_evaluator = likelihood_evaluator
         self._nwalkers = nwalkers
         self.total_iterations = total_iterations
-        try:
-            with InferenceFile(''.join([output_file, '.checkpoint']), 'r') as fp:
-                self.runcount = fp.attrs['runcount']
-        except:
-            self.runcount = 0
-        self.basepath = './multinest-'
+        #try:
+        #    with InferenceFile(''.join([output_file, '.checkpoint']), 'r') as fp:
+        #        self.runcount = fp.attrs['runcount']
+        #except:
+        #    self.runcount = 0
+        self.runcount = runcount
+        self.basepath = './multinest-'+output_file.split('/')[-1].strip('.hdf')+'-'
         self.basemodepath = output_file.strip('.hdf')
         self.mmodal = True
         self.ins = False
@@ -124,7 +125,7 @@ class MultiNestSampler(BaseMCMCSampler):
                    prior_eval=opts.prior_eval,
                    max_iter=opts.checkpoint_interval,
                    total_iterations=opts.niterations,
-                   output_file=opts.output_file)
+                   output_file=opts.output_file, runcount=opts.runcount)
 
     @property
     def lnpost(self):
@@ -200,7 +201,7 @@ class MultiNestSampler(BaseMCMCSampler):
             if dist_dict[p].name in ['uniform', 'uniform_angle']:
                 scale = bound[p].max - bound[p].min
                 transformed_cube[i] = cube[i] * scale + bound[p].min
-            elif dist_dict[p].name == 'sin_angle':
+            elif dist_dict[p].name in ['sin_angle', 'cos_angle']:
                 transformed_cube[i] = dist_dict[p]._cdfinv(p, cube[i])
         return transformed_cube
 
@@ -289,12 +290,12 @@ class MultiNestSampler(BaseMCMCSampler):
         #self.write_acceptance_fraction(fp)
         #print("Writing state")
         self.write_state(fp)
-        print("Finished {} of {} iterations".format(self.runcount*self.max_iter,
-                                                    self.total_iterations))
-        if self.mmodal and not self.ins \
-            and self.runcount*self.max_iter == self.total_iterations:
-            print("Writing separated posteriors")
-            self.write_separated_posteriors(fp)
+        #print("Finished {} of {} iterations".format(self.runcount*self.max_iter,
+        #                                            self.total_iterations))
+        #if self.mmodal and not self.ins \
+        #    and self.runcount*self.max_iter == self.total_iterations:
+        #    print("Writing separated posteriors")
+        #    self.write_separated_posteriors(fp)
 
     def write_metadata(self, fp, **kwargs):
         """Writes metadata about this sampler to the given file. Metadata is
@@ -331,13 +332,26 @@ class MultiNestSampler(BaseMCMCSampler):
 
     def write_chain(self, fp, start_iteration=None, **kwargs):
         # get the actual posterior data here
-        self._samples = self.a.get_data()[:, 2:]
+        #self._samples = self.a.get_data()[:, 2:]
+        #delattr(self.a, 'equal_weighted_posterior')
+        try:
+            #self._samples = self.a.get_equal_weighted_posterior()[:, :-1]
+            self._samples = numpy.loadtxt(self.basepath+'post_equal_weights.dat')[:, :-1]
+            num_samples = self._samples.shape[0]
+        except IndexError:
+            #self._samples = self.a.get_equal_weighted_posterior()[:-1]
+            self._samples = numpy.loadtxt(self.basepath+'post_equal_weights.dat')[:-1]
+            num_samples = 1
+        print("Have {} posterior samples".format(num_samples))
         for a in self.variable_args:
             # build parameter chain from samples
             idx = list(self.variable_args).index(a)
-            chain = numpy.array([pos[idx] for pos in self._samples])
+            if num_samples > 1:
+                chain = numpy.array([pos[idx] for pos in self._samples])
+            else:
+                chain = numpy.array(self._samples[idx])
             istart = start_iteration
-            istop = len(self._samples)
+            istop = num_samples
             try:
                 #fp_niterations = fp['samples'][a].shape[-1]
                 #if not istart:
@@ -380,26 +394,35 @@ class MultiNestSampler(BaseMCMCSampler):
                     modes_samples[mode_label][a].append(s)
 
         # write out each mode to a separate InferenceFile
-        for mode in modes_samples:
-            #print("Writing mode {}".format(mode))
-            outfile = ''.join([self.basemodepath, '_mode_', str(mode), '.hdf'])
-            with InferenceFile(outfile, 'w') as fp_mode:
-                for a in fp.attrs.keys():
-                    fp_mode.attrs[a] = fp.attrs[a]
-                for a in args:
-                    fp_mode.create_dataset(
-                        'samples/'+a,
-                        data=numpy.array(modes_samples[mode][a][:]))
-                fp_mode.create_dataset(
-                    'likelihood_stats/loglr',
-                    data=numpy.array(modes_samples[mode]['loglr'][:]))
+        #for mode in modes_samples:
+        #    #print("Writing mode {}".format(mode))
+        #    outfile = ''.join([self.basemodepath, '_mode_', str(mode), '.hdf'])
+        #    with InferenceFile(outfile, 'w') as fp_mode:
+        #        for a in fp.attrs.keys():
+        #            fp_mode.attrs[a] = fp.attrs[a]
+        #        for a in args:
+        #            fp_mode.create_dataset(
+        #                'samples/'+a,
+        #                data=numpy.array(modes_samples[mode][a][:]))
+        #        fp_mode.create_dataset(
+        #            'likelihood_stats/loglr',
+        #            data=numpy.array(modes_samples[mode]['loglr'][:]))
         return
 
     def write_likelihood_stats(self, fp, **kwargs):
         fp.attrs['logz'] = self._logz
-        logl = -0.5 * self.a.get_data()[:, 1]
+        #logl = -0.5 * self.a.get_data()[:, 1]
+        #delattr(self.a, 'equal_weighted_posterior')
+        try:
+            #logl = self.a.get_equal_weighted_posterior()[:, -1]
+            logl = numpy.loadtxt(self.basepath+'post_equal_weights.dat')[:, -1]
+            num_samples = len(logl)
+        except IndexError:
+            #logl = self.a.get_equal_weighted_posterior()[-1]
+            logl = numpy.loadtxt(self.basepath+'post_equal_weights.dat')[-1]
+            num_samples = 1
         self._loglr = logl - self.likelihood_evaluator.lognl
-        istop = len(self._loglr)
+        istop = num_samples
         try:
             fp['likelihood_stats']['loglr'].resize(istop, axis=0)
         except KeyError:
@@ -409,16 +432,28 @@ class MultiNestSampler(BaseMCMCSampler):
         return
 
     @classmethod
-    def read_samples(cls, fp, parameters, **kwargs):
+    #def read_samples(cls, fp, parameters, **kwargs):
+    def read_samples(cls, fp, parameters,
+                     thin_start=None, thin_interval=None, thin_end=None,
+                     iteration=None, walkers=None, flatten=True,
+                     samples_group=None, array_class=None):
         # get the names of fields needed for the given parameters
-        possible_fields = fp[kwargs['samples_group']].keys()
+        #possible_fields = fp[kwargs['samples_group']].keys()
+        #loadfields = FieldArray.parse_parameters(parameters, possible_fields)
+        #return cls._read_fields(fp, kwargs['samples_group'],
+        #                        loadfields, FieldArray,
+        #                        thin_start=kwargs['thin_start'],
+        #                        thin_interval=kwargs['thin_interval'],
+        #                        thin_end=kwargs['thin_end'],
+        #                        iteration=kwargs['iteration'])
+        possible_fields = fp[samples_group].keys()
         loadfields = FieldArray.parse_parameters(parameters, possible_fields)
-        return cls._read_fields(fp, kwargs['samples_group'],
+        return cls._read_fields(fp, samples_group,
                                 loadfields, FieldArray,
-                                thin_start=kwargs['thin_start'],
-                                thin_interval=kwargs['thin_interval'],
-                                thin_end=kwargs['thin_end'],
-                                iteration=kwargs['iteration'])
+                                thin_start=thin_start,
+                                thin_interval=thin_interval,
+                                thin_end=thin_end,
+                                iteration=iteration)
 
     @staticmethod
     def _read_fields(fp, fields_group, fields, array_class,
