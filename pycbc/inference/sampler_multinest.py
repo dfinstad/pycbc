@@ -201,7 +201,7 @@ class MultiNestSampler(BaseMCMCSampler):
             if dist_dict[p].name in ['uniform', 'uniform_angle']:
                 scale = bound[p].max - bound[p].min
                 transformed_cube[i] = cube[i] * scale + bound[p].min
-            elif dist_dict[p].name in ['sin_angle', 'cos_angle']:
+            elif dist_dict[p].name in ['sin_angle', 'cos_angle', 'uniform_log10']:
                 transformed_cube[i] = dist_dict[p]._cdfinv(p, cube[i])
         return transformed_cube
 
