@@ -147,10 +147,6 @@ def add_sampler_option_group(parser):
         help="Set sampling efficiency of multinest sampler to optimize for "
              "parameter estimation or model selection. Options are "
              "'parameter' or 'model'")
-    sampler_group.add_argument("--multinest-mpi", action="store_true",
-        default=False,
-        help="Initialize MPI through the multinest sampler. This shouldn't "
-             "be necessary, so remove this argument after testing.")
     sampler_group.add_argument("--evidence-tolerance", type=float, default=0.5,
         help="Set incremental evidence tolerance for stopping criterion of "
         "multinest sampler.")
