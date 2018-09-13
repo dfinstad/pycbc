@@ -65,7 +65,7 @@ class MultiNestSampler(BaseMCMCSampler):
     def __init__(self, likelihood_evaluator, nwalkers, pool=None,
                  likelihood_call=None, prior_eval=None, max_iter=0,
                  total_iterations=0, output_file=None, runcount=0,
-                 mmodal=None, ztol=None, run_mode=None):
+                 mmodal=None, ztol=None, run_mode=None, mpi=None):
         try:
             import pymultinest
         except ImportError:
@@ -101,6 +101,7 @@ class MultiNestSampler(BaseMCMCSampler):
         self.mmodal = mmodal
         self.ztol = ztol
         self.run_mode = run_mode
+        self.mpi = mpi
         self.ins = False
         self.a = Analyzer(len(self.variable_args),
                           outputfiles_basename=self.basepath)
@@ -130,7 +131,7 @@ class MultiNestSampler(BaseMCMCSampler):
                    total_iterations=opts.niterations,
                    output_file=opts.output_file, runcount=opts.runcount,
                    mmodal=opts.multimodal, run_mode=opts.multinest_run_mode,
-                   ztol=opts.evidence_tolerance)
+                   ztol=opts.evidence_tolerance, mpi=opts.multinest_mpi)
 
     @property
     def lnpost(self):
@@ -252,7 +253,8 @@ class MultiNestSampler(BaseMCMCSampler):
                     importance_nested_sampling=self.ins,
                     evidence_tolerance=self.ztol,
                     sampling_efficiency=self.run_mode,
-                    outputfiles_basename=self.basepath, **kwargs)
+                    outputfiles_basename=self.basepath,
+                    init_MPI=self.mpi, **kwargs)
         p = res['samples'] # FIXME
         lnpost = res['samples'] # FIXME
         rstate = self.random_state
