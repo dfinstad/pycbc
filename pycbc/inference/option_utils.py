@@ -139,6 +139,17 @@ def add_sampler_option_group(parser):
     sampler_group.add_argument("--ntemps", type=int, default=None,
         help="Number of temperatures to use in sampler. Required for parallel "
              "tempered MCMC samplers.")
+    sampler_group.add_argument("--multimodal", action="store_true",
+        default=False,
+        help="Use multinest sampler's multimodal sampling.")
+    sampler_group.add_argument("--multinest-run-mode", type=str,
+        default='model',
+        help="Set sampling efficiency of multinest sampler to optimize for "
+             "parameter estimation or model selection. Options are "
+             "'parameter' or 'model'")
+    sampler_group.add_argument("--evidence-tolerance", type=float, default=0.5,
+        help="Set incremental evidence tolerance for stopping criterion of "
+        "multinest sampler.")
     sampler_group.add_argument("--burn-in-function", default=None, nargs='+',
         choices=burn_in.burn_in_functions.keys(),
         help="Use the given function to determine when chains are burned in. "

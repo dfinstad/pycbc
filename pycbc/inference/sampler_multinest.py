@@ -64,7 +64,8 @@ class MultiNestSampler(BaseMCMCSampler):
 
     def __init__(self, likelihood_evaluator, nwalkers, pool=None,
                  likelihood_call=None, prior_eval=None, max_iter=0,
-                 total_iterations=0, output_file=None, runcount=0):
+                 total_iterations=0, output_file=None, runcount=0,
+                 mmodal=None, ztol=None, run_mode=None):
         try:
             import pymultinest
         except ImportError:
@@ -97,7 +98,9 @@ class MultiNestSampler(BaseMCMCSampler):
         self.runcount = runcount
         self.basepath = './multinest-'+output_file.split('/')[-1].strip('.hdf')+'-'
         self.basemodepath = output_file.strip('.hdf')
-        self.mmodal = True
+        self.mmodal = mmodal
+        self.ztol = ztol
+        self.run_mode = run_mode
         self.ins = False
         self.a = Analyzer(len(self.variable_args),
                           outputfiles_basename=self.basepath)
@@ -125,7 +128,9 @@ class MultiNestSampler(BaseMCMCSampler):
                    prior_eval=opts.prior_eval,
                    max_iter=opts.checkpoint_interval,
                    total_iterations=opts.niterations,
-                   output_file=opts.output_file, runcount=opts.runcount)
+                   output_file=opts.output_file, runcount=opts.runcount,
+                   mmodal=opts.multimodal, run_mode=opts.multinest_run_mode,
+                   ztol=opts.evidence_tolerance)
 
     @property
     def lnpost(self):
@@ -245,11 +250,11 @@ class MultiNestSampler(BaseMCMCSampler):
                     max_iter=self.max_iter, verbose=True,
                     multimodal=self.mmodal,
                     importance_nested_sampling=self.ins,
-                    evidence_tolerance=0.1,
-                    sampling_efficiency=0.8,
+                    evidence_tolerance=self.ztol,
+                    sampling_efficiency=self.run_mode,
                     outputfiles_basename=self.basepath, **kwargs)
-        p = res['samples'][-1]
-        lnpost = res['samples'][:]
+        p = res['samples'] # FIXME
+        lnpost = res['samples'] # FIXME
         rstate = self.random_state
         self._logz = res['logZ']
         #p, lnpost, rstate = res[0], res[1], res[2]
