@@ -150,6 +150,10 @@ def add_sampler_option_group(parser):
     sampler_group.add_argument("--evidence-tolerance", type=float, default=0.5,
         help="Set incremental evidence tolerance for stopping criterion of "
         "multinest sampler.")
+    sampler_group.add_argument("--importance-nested-sampling",
+        action="store_true", default=False,
+        help="Use importance nested sampling functionality of multinest "
+             "sampler. See http://arxiv.org/abs/1306.2144 for details.")
     sampler_group.add_argument("--burn-in-function", default=None, nargs='+',
         choices=burn_in.burn_in_functions.keys(),
         help="Use the given function to determine when chains are burned in. "

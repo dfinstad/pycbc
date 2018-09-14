@@ -28,8 +28,9 @@ packages for parameter estimation.
 
 from six import string_types
 
-import os
+import logging
 import numpy
+import os
 from pycbc.inference.sampler_base import BaseMCMCSampler, _check_fileformat
 from pycbc.io import FieldArray
 #from pycbc.io.inference_hdf import InferenceFile
@@ -65,7 +66,7 @@ class MultiNestSampler(BaseMCMCSampler):
     def __init__(self, likelihood_evaluator, nwalkers, pool=None,
                  likelihood_call=None, prior_eval=None, max_iter=0,
                  total_iterations=0, output_file=None, runcount=0,
-                 mmodal=None, ztol=None, run_mode=None):
+                 mmodal=None, ztol=None, run_mode=None, ins=None):
         try:
             import pymultinest
         except ImportError:
@@ -91,7 +92,7 @@ class MultiNestSampler(BaseMCMCSampler):
         self.mmodal = mmodal
         self.ztol = ztol
         self.run_mode = run_mode
-        self.ins = False
+        self.ins = ins
         self.a = Analyzer(len(self.variable_args),
                           outputfiles_basename=self.basepath)
 
@@ -120,7 +121,8 @@ class MultiNestSampler(BaseMCMCSampler):
                    total_iterations=opts.niterations,
                    output_file=opts.output_file, runcount=opts.runcount,
                    mmodal=opts.multimodal, run_mode=opts.multinest_run_mode,
-                   ztol=opts.evidence_tolerance)
+                   ztol=opts.evidence_tolerance,
+                   ins=opts.importance_nested_sampling)
 
     @property
     def lnpost(self):
@@ -215,6 +217,16 @@ class MultiNestSampler(BaseMCMCSampler):
         # set emcee's generator to the same state
         self._sampler.random_state = rstate
 
+    @staticmethod
+    def print_status(*args):
+        """Print sampler stats to stderr at each checkpoint.
+        """
+        maxloglike = args[-3]
+        logz = args[-2]
+        dlogz = args[-1]
+        logging.info("Max loglikelihood: {}".format(maxloglike))
+        logging.info("logZ = {} +/- {}".format(logz, dlogz))
+
     def run(self, niterations, **kwargs):
         """Advance the ensemble for a number of samples.
 
@@ -242,7 +254,8 @@ class MultiNestSampler(BaseMCMCSampler):
                     importance_nested_sampling=self.ins,
                     evidence_tolerance=self.ztol,
                     sampling_efficiency=self.run_mode,
-                    outputfiles_basename=self.basepath, **kwargs)
+                    outputfiles_basename=self.basepath,
+                    dump_callback=self.print_status, **kwargs)
         p = res['samples'] # FIXME
         lnpost = res['samples'] # FIXME
         rstate = self.random_state
