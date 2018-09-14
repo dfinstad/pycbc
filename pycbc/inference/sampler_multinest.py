@@ -96,6 +96,13 @@ class MultiNestSampler(BaseMCMCSampler):
         self.a = Analyzer(len(self.variable_args),
                           outputfiles_basename=self.basepath)
 
+        # DEBUGGING INFO
+        logging.info("Using multinest sampler with the following settings:")
+        logging.info("importance nested sampling: {}".format(ins))
+        logging.info("multimodal sampling: {}".format(mmodal))
+        logging.info("run mode: {}".format(run_mods))
+        logging.info("evidence tolerance: {}".format(ztol))
+
     @classmethod
     def from_cli(cls, opts, likelihood_evaluator, pool=None,
                  likelihood_call=None):
