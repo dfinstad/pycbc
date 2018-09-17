@@ -33,9 +33,9 @@ import numpy
 import os
 from pycbc.inference.sampler_base import BaseMCMCSampler, _check_fileformat
 from pycbc.io import FieldArray
-#from pycbc.io.inference_hdf import InferenceFile
 from pycbc.filter import autocorrelation
-from pymultinest import solve, Analyzer
+from pymultinest import Analyzer
+from pymultinest import run as ns_run
 
 #
 # =============================================================================
@@ -79,7 +79,7 @@ class MultiNestSampler(BaseMCMCSampler):
         self.random_state = rstate
         # initialize
         super(MultiNestSampler, self).__init__(
-              sampler, likelihood_evaluator)
+              self, likelihood_evaluator)
         self.max_iter = int(max_iter)
         self.prior_eval = prior_eval
         self.likelihood_evaluator = likelihood_evaluator
@@ -93,6 +93,7 @@ class MultiNestSampler(BaseMCMCSampler):
         self.ztol = ztol
         self.run_mode = run_mode
         self.ins = ins
+        self._dlogz, self._ins_logz, self._ins_dlogz = None, None, None
         self.a = Analyzer(len(self.variable_args),
                           outputfiles_basename=self.basepath)
 
@@ -100,7 +101,7 @@ class MultiNestSampler(BaseMCMCSampler):
         logging.info("Using multinest sampler with the following settings:")
         logging.info("importance nested sampling: {}".format(ins))
         logging.info("multimodal sampling: {}".format(mmodal))
-        logging.info("run mode: {}".format(run_mods))
+        logging.info("run mode: {}".format(run_mode))
         logging.info("evidence tolerance: {}".format(ztol))
 
     @classmethod
@@ -224,12 +225,12 @@ class MultiNestSampler(BaseMCMCSampler):
         # set emcee's generator to the same state
         self._sampler.random_state = rstate
 
-    @staticmethod
-    def print_status(*args):
+    def print_status(self, *args):
         """Print sampler stats to stderr at each checkpoint.
         """
-        maxloglike = args[-3]
-        logz = args[-2]
+        maxloglike = args[-4]
+        logz_idx = -2 if self.ins else -3
+        logz = args[logz_idx]
         dlogz = args[-1]
         logging.info("Max loglikelihood: {}".format(maxloglike))
         logging.info("logZ = {} +/- {}".format(logz, dlogz))
@@ -254,23 +255,77 @@ class MultiNestSampler(BaseMCMCSampler):
         """
         self.runcount += 1
         n_dims = len(self.variable_args)
-        res = solve(self.loglike_for_cube, self.prior_for_cube,
-                    n_dims, n_live_points=self._nwalkers,
-                    max_iter=self.max_iter, verbose=True,
-                    multimodal=self.mmodal,
-                    importance_nested_sampling=self.ins,
-                    evidence_tolerance=self.ztol,
-                    sampling_efficiency=self.run_mode,
-                    outputfiles_basename=self.basepath,
-                    dump_callback=self.print_status, **kwargs)
+        res = self.solve(self.loglike_for_cube, self.prior_for_cube,
+                         n_dims, n_live_points=self._nwalkers,
+                         max_iter=self.max_iter, verbose=True,
+                         multimodal=self.mmodal,
+                         importance_nested_sampling=self.ins,
+                         evidence_tolerance=self.ztol,
+                         sampling_efficiency=self.run_mode,
+                         outputfiles_basename=self.basepath,
+                         dump_callback=self.print_status, **kwargs)
         p = res['samples'] # FIXME
         lnpost = res['samples'] # FIXME
         rstate = self.random_state
-        self._logz = res['logZ']
-        #p, lnpost, rstate = res[0], res[1], res[2]
-        # update the positions
-        #self._pos = p
+        self._logz = res['logz']
+        self._dlogz = res['logz_err']
+        if self.ins:
+            self._ins_logz = res['ins_logz']
+            self._ins_dlogz = res['ins_logz_err']
         return p, lnpost, rstate
+
+    def solve(self, LogLikelihood, Prior, n_dims, **kwargs):
+	kwargs['n_dims'] = n_dims
+	files_temporary = False
+	if 'outputfiles_basename' not in kwargs:
+		files_temporary = True
+		tempdir = tempfile.mkdtemp('pymultinest')
+		kwargs['outputfiles_basename'] = tempdir + '/'
+	outputfiles_basename = kwargs['outputfiles_basename']
+	def SafePrior(cube, ndim, nparams):
+	    try:
+	        a = numpy.array([cube[i] for i in range(n_dims)])
+		b = Prior(a)
+		for i in range(n_dims):
+		    cube[i] = b[i]
+	    except Exception as e:
+		import sys
+		sys.stderr.write('ERROR in prior: %s\n' % e)
+	        sys.exit(1)
+	
+	def SafeLoglikelihood(cube, ndim, nparams, lnew):
+	    try:
+	        a = numpy.array([cube[i] for i in range(n_dims)])
+	        l = float(LogLikelihood(a))
+		if not numpy.isfinite(l):
+		    import sys
+		    sys.stderr.write('WARNING: loglikelihood not finite: %f\n' % (l))
+		    sys.stderr.write('         for parameters: %s\n' % a)
+		    sys.stderr.write('         returned very low value instead\n')
+		    return -1e100
+		return l
+	    except Exception as e:
+		import sys
+		sys.stderr.write('ERROR in loglikelihood: %s\n' % e)
+		sys.exit(1)
+	
+	kwargs['LogLikelihood'] = SafeLoglikelihood
+	kwargs['Prior'] = SafePrior
+	ns_run(**kwargs)
+	
+	#analyzer = Analyzer(n_dims, outputfiles_basename = outputfiles_basename)
+	stats = self.a.get_stats() #analyzer.get_stats()
+	samples = self.a.get_equal_weighted_posterior()[:,:-1]
+	
+	#if files_temporary:
+	#	shutil.rmtree(tempdir, ignore_errors=True)
+	
+	return dict(
+            logz=stats['nested sampling global log-evidence'],
+	    logz_err=stats['nested sampling global log-evidence error'],
+            ins_logz=stats['nested importance sampling global log-evidence'],
+            ins_logz_err=stats['nested importance sampling global log-evidence error'],
+            samples = samples,)
 
     def write_results(self, fp, start_iteration=None,
                       max_iterations=None, **metadata):
@@ -426,6 +481,10 @@ class MultiNestSampler(BaseMCMCSampler):
 
     def write_likelihood_stats(self, fp, **kwargs):
         fp.attrs['logz'] = self._logz
+        fp.attrs['dlogz'] = self._dlogz
+        if self.ins:
+            fp.attrs['ins_logz'] = self._ins_logz
+            fp.attrs['ins_dlogz'] = self._ins_dlogz
         #logl = -0.5 * self.a.get_data()[:, 1]
         #delattr(self.a, 'equal_weighted_posterior')
         try:
