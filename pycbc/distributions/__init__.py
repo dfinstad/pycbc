@@ -170,7 +170,8 @@ def read_constraints_from_config(cp, transforms=None,
     list
         List of ``Constraint`` objects. Empty if no constraints were provided.
     """
-    variable_args = cp.options('variable_args')
+    # FIXME why did this line need to be added??
+    #variable_args = cp.options('variable_args')
     cons = []
     for subsection in cp.get_subsections(constraint_section):
         name = cp.get_opt_tag(constraint_section, "name", subsection)
