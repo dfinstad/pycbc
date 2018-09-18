@@ -201,12 +201,14 @@ class MultiNestSampler(BaseMCMCSampler):
         dist_args = [d.params[0] for d in dists]
         dist_dict = {a: d for a,d in zip(dist_args, dists)}
         transformed_cube = numpy.array(cube).copy()
+        non_uniform_dists = [
+            'sin_angle', 'cos_angle', 'uniform_log10', 'gaussian']
         for i, p in enumerate(self.variable_args):
             bound = dist_dict[p].bounds
             if dist_dict[p].name in ['uniform', 'uniform_angle']:
                 scale = bound[p].max - bound[p].min
                 transformed_cube[i] = cube[i] * scale + bound[p].min
-            elif dist_dict[p].name in ['sin_angle', 'cos_angle', 'uniform_log10']:
+            elif dist_dict[p].name in non_uniform_dists:
                 transformed_cube[i] = dist_dict[p]._cdfinv(p, cube[i])
         return transformed_cube
 
