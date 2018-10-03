@@ -31,6 +31,7 @@ from six import string_types
 import logging
 import numpy
 import os
+import pycbc.transforms
 from pycbc.inference.sampler_base import BaseMCMCSampler, _check_fileformat
 from pycbc.io import FieldArray
 from pycbc.filter import autocorrelation
@@ -216,6 +217,17 @@ class MultiNestSampler(BaseMCMCSampler):
         """Map prior cube to likelihood function.
         """
         params = {p: v for p, v in zip(self.variable_args, cube)}
+        # debug transforms
+        #print("Sampling transforms:")
+        #print(type(self.likelihood_evaluator._sampling_transforms), self.likelihood_evaluator._sampling_transforms)
+        #print("Waveform transforms:")
+        #print(type(self.likelihood_evaluator._waveform_transforms), self.likelihood_evaluator._waveform_transforms)
+        # apply sampling transforms
+        params = self.likelihood_evaluator.apply_sampling_transforms(params)
+        # apply waveform transforms
+        if self.likelihood_evaluator._waveform_transforms is not None:
+            params = pycbc.transforms.apply_transforms(
+                         params, self.likelihood_evaluator._waveform_transforms)
         return self.likelihood_evaluator.loglikelihood(**params)
 
     def set_state_from_file(self, fp):
