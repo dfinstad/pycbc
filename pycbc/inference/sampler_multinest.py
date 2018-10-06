@@ -87,6 +87,7 @@ class MultiNestSampler(BaseMCMCSampler):
         self._nwalkers = nwalkers
         self.total_iterations = total_iterations
         self.runcount = runcount
+        self.num_posterior_samples = 0
         #self.basepath = './multinest-'+output_file.split('/')[-1].strip('.hdf')+'-'
         self.basepath = output_file.strip('.hdf') + '-'
         self.basemodepath = output_file.strip('.hdf')
@@ -246,6 +247,7 @@ class MultiNestSampler(BaseMCMCSampler):
         logz_idx = -2 if self.ins else -3
         logz = args[logz_idx]
         dlogz = args[-1]
+        logging.info("Have {} posterior samples".format(self.num_posterior_samples))
         logging.info("Max loglikelihood: {}".format(maxloglike))
         logging.info("logZ = {} +/- {}".format(logz, dlogz))
 
@@ -333,13 +335,20 @@ class MultiNestSampler(BaseMCMCSampler):
 	
 	#if files_temporary:
 	#	shutil.rmtree(tempdir, ignore_errors=True)
-	
-	return dict(
-            logz=stats['nested sampling global log-evidence'],
-	    logz_err=stats['nested sampling global log-evidence error'],
-            ins_logz=stats['nested importance sampling global log-evidence'],
-            ins_logz_err=stats['nested importance sampling global log-evidence error'],
-            samples = samples,)
+
+        if self.ins:
+	    return dict(
+                logz=stats['nested sampling global log-evidence'],
+	        logz_err=stats['nested sampling global log-evidence error'],
+                ins_logz=stats['nested importance sampling global log-evidence'],
+                ins_logz_err=stats['nested importance sampling global log-evidence error'],
+                samples=samples,)
+        else:
+	    return dict(
+                logz=stats['nested sampling global log-evidence'],
+	        logz_err=stats['nested sampling global log-evidence error'],
+                samples=samples,)
+
 
     def write_results(self, fp, start_iteration=None,
                       max_iterations=None, **metadata):
@@ -371,7 +380,7 @@ class MultiNestSampler(BaseMCMCSampler):
         #print("Writing likelihood stats")
         self.write_likelihood_stats(fp, start_iteration=start_iteration,
                                     max_iterations=max_iterations)
-        #self.write_acceptance_fraction(fp)
+        self.write_acceptance_fraction(fp)
         #print("Writing state")
         self.write_state(fp)
         #print("Finished {} of {} iterations".format(self.runcount*self.max_iter,
@@ -414,6 +423,16 @@ class MultiNestSampler(BaseMCMCSampler):
             else:
                 fp.attrs[arg] = val
 
+    def write_acceptance_fraction(self, fp):
+        """Dummy function for now so PP workflow won't fail.
+        """
+        try:
+            temp = fp['acceptance_fraction'][:]
+        except KeyError:
+            fp.create_dataset('acceptance_fraction', (self._nwalkers,),
+                              data=numpy.zeros(self._nwalkers))
+        return
+
     def write_chain(self, fp, start_iteration=None, **kwargs):
         # get the actual posterior data here
         #self._samples = self.a.get_data()[:, 2:]
@@ -427,6 +446,7 @@ class MultiNestSampler(BaseMCMCSampler):
             self._samples = numpy.loadtxt(self.basepath+'post_equal_weights.dat')[:-1]
             num_samples = 1
         print("Have {} posterior samples".format(num_samples))
+        self.num_posterior_samples = num_samples
         for a in self.variable_args:
             # build parameter chain from samples
             idx = list(self.variable_args).index(a)
