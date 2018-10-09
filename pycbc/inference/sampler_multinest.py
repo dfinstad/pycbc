@@ -329,8 +329,7 @@ class MultiNestSampler(BaseMCMCSampler):
 	kwargs['Prior'] = SafePrior
 	ns_run(**kwargs)
 	
-	#analyzer = Analyzer(n_dims, outputfiles_basename = outputfiles_basename)
-	stats = self.a.get_stats() #analyzer.get_stats()
+	stats = self.a.get_mode_stats() #analyzer.get_stats()
 	samples = self.a.get_equal_weighted_posterior()[:,:-1]
 	
 	#if files_temporary:
