@@ -708,12 +708,19 @@ class BaseModel(object):
         variable_params, static_params = distributions.read_params_from_config(
             cp, prior_section=prior_section, vargs_section=vparams_section,
             sargs_section=sparams_section)
+        # try to load sampling transforms
+        try:
+            sampling_transforms = SamplingTransforms.from_config(
+                cp, variable_params)
+        except ValueError:
+            sampling_transforms = None
         # get prior
         prior = cls.prior_from_config(cp, variable_params, prior_section,
                                       constraint_section)
         args = {'variable_params': variable_params,
                 'static_params': static_params,
-                'prior': prior}
+                'prior': prior,
+                'sampling_transforms': sampling_transforms}
         # get any other keyword arguments provided
         args.update(cls.extra_args_from_config(cp, section,
                                                skip_args=['name']))
