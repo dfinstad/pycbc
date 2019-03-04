@@ -1769,14 +1769,16 @@ class PycbcInferenceExecutable(Executable):
             logging.info("Setting output files for condor")
             out_fname = ckpt_fname.split('.checkpoint')[0]
             bkup_fname = out_fname + '.bkup'
+            # hard-code output to home directory for now
+            outdir = '/home/daniel.finstad/projects/pycbc-pisn-paper/run/spool{}/'.format(inj_seed)
             node.add_profile('condor', 'transfer_output_files',
-                             ', '.join([out_fname, ckpt_fname, bkup_fname]))
+                             ', '.join([outdir+out_fname, outdir+ckpt_fname, outdir+bkup_fname]))
 
             # remap output files to my home directory
             staging_dir = '/home/daniel.finstad/projects/pycbc-pisn-paper/run/spool{}/'.format(inj_seed)
             node.add_profile('condor', 'transfer_output_remaps',
-                             '"{}={}; {}={}"'.format(ckpt_fname, staging_dir+ckpt_fname,
-                                                     bkup_fname, staging_dir+bkup_fname))
+                             '"{}={}; {}={}"'.format(outdir+ckpt_fname, staging_dir+ckpt_fname,
+                                                     outdir+bkup_fname, staging_dir+bkup_fname))
 
 
             # set options to make checkpointing work

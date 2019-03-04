@@ -112,7 +112,9 @@ pycbc.init_logging(opts.verbose)
 # set output path if condor checkpointing is enabled
 if opts.condor_checkpoint:
     logging.info("Condor checkpointing is enabled")
-    condor_iwd = os.environ['_CONDOR_JOB_IWD'] + '/'
+    #condor_iwd = os.environ['_CONDOR_JOB_IWD'] + '/'
+    # hard-code this to home directory for now
+    condor_iwd = '/home/daniel.finstad/projects/pycbc-pisn-paper/run/spool{}/'.format(opts.inj_seed)
 
     # check to see if checkpoint files exist in working directory already
     ckpt_fname = opts.output_file + '.checkpoint'
