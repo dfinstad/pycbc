@@ -81,6 +81,13 @@ parser.add_argument(
     help="Trigger time to analyze. You only need to use this option "
          "with ``--data-type detector_data``.")
 
+parser.add_argument(
+    "--condor-checkpoint", action="store_true",
+    default=False)
+
+parser.add_argument("--inj-seed", type=int, required=True,
+                    help="The random seed used to generate injections.")
+
 # add option groups
 configuration.add_workflow_command_line_group(parser)
 
@@ -209,7 +216,9 @@ for i in range(n_injections):
                                      config_file,
                                      injection_file=injection_file,
                                      seed=i, fake_strain_seed=fake_strain_seed,
-                                     tags=[str(i)])
+                                     tags=[str(i)],
+                                     condor_checkpoint=opts.condor_checkpoint,
+                                     inj_seed=opts.inj_seed)
     inference_files.append(inference_file)
     workflow += node
 

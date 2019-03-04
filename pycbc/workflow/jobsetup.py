@@ -29,6 +29,7 @@ https://ldas-jobs.ligo.caltech.edu/~cbc/docs/pycbc/ahope.html
 """
 
 import logging
+import copy
 import math, os
 import lal
 from ligo import segments
@@ -1685,7 +1686,8 @@ class PycbcInferenceExecutable(Executable):
                                                        ifo, out_dir, tags)
 
     def create_node(self, channel_names, config_file, injection_file=None,
-                    seed=None, fake_strain_seed=None, tags=None):
+                    seed=None, fake_strain_seed=None, tags=None,
+                    condor_checkpoint=False, inj_seed=None):
         """ Set up a CondorDagmanNode class to run ``pycbc_inference``.
 
         Parameters
@@ -1742,6 +1744,54 @@ class PycbcInferenceExecutable(Executable):
             node.add_opt("--seed", seed)
         inference_file = node.new_output_file_opt(analysis_time,
                                                   ".hdf", "--output-file",
-                                                  tags=tags)
+                                                  tags=tags, store_file=False)
+
+        # replicate process of creating and storing inference_file as output
+        all_tags = copy.deepcopy(node.executable.tags)
+        for tag in tags:
+            if tag not in all_tags:
+                all_tags.append(tag)
+
+        checkpoint_file = File(node.executable.ifo_list, node.executable.name,
+                               analysis_time, extension=".hdf.checkpoint", tags=all_tags,
+                               directory=node.executable.out_dir, store_file=False)
+        #node._add_output(checkpoint_file)
+
+        ckpt_fname = checkpoint_file._filename(
+                         ''.join(node.executable.ifo_list),
+                         node.executable.name+'_'+tags[0],
+                         ".hdf.checkpoint", analysis_time)
+        if condor_checkpoint is True:
+            logging.info("Setting condor checkpointing option")
+            node.add_opt("--condor-checkpoint")
+
+            # set output files for condor
+            logging.info("Setting output files for condor")
+            out_fname = ckpt_fname.split('.checkpoint')[0]
+            bkup_fname = out_fname + '.bkup'
+            node.add_profile('condor', 'transfer_output_files',
+                             ', '.join([out_fname, ckpt_fname, bkup_fname]))
+
+            # remap output files to my home directory
+            staging_dir = '/home/daniel.finstad/projects/pycbc-pisn-paper/run/spool{}/'.format(inj_seed)
+            node.add_profile('condor', 'transfer_output_remaps',
+                             '"{}={}; {}={}"'.format(ckpt_fname, staging_dir+ckpt_fname,
+                                                     bkup_fname, staging_dir+bkup_fname))
+
+
+            # set options to make checkpointing work
+            node.add_profile('condor', 'on_exit_remove',
+                             '(ExitBySignal == False) && (ExitCode == 0)', force=True)
+            #node.add_profile('condor', 'periodic_hold',
+            #                 '(JobStatus == 2) && ((CurrentTime - EnteredCurrentStatus) > 3600)', force=True)
+            #node.add_profile('condor', 'periodic_release', '(HoldReasonCode == 3)', force=True)
+            node.add_profile('condor', '+WantCheckpointSignal', 'TRUE', force=True)
+            node.add_profile('condor', '+WantFTOnCheckpoint', 'TRUE', force=True)
+            node.add_profile('condor', '+CheckpointExitBySignal', 'TRUE', force=True)
+            node.add_profile('condor', '+CheckpointExitSignal', '10', force=True)
+            node.add_profile('condor', '+SuccessCheckpointExitBySignal', 'TRUE', force=True)
+            node.add_profile('condor', '+SuccessCheckpointExitSignal', '10', force=True)
+            node.add_profile('condor', '+CheckpointSig', '10', force=True)
+            node.add_profile('condor', 'kill_sig', '10', force=True)
 
         return node, inference_file

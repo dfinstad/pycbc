@@ -19,7 +19,9 @@
 """
 
 import os
+import sys
 import argparse
+import glob
 import logging
 import shutil
 
@@ -78,6 +80,13 @@ parser.add_argument("--psd-end-time", type=float, default=None,
 parser.add_argument("--seed", type=int, default=0,
                     help="Seed to use for the random number generator that "
                          "initially distributes the walkers. Default is 0.")
+
+# add condor checkpoint option
+parser.add_argument("--condor-checkpoint", action="store_true", default=False,
+                    help="Use condor working directory as output file path.")
+parser.add_argument("--inj-seed", type=int,
+                    help="The random seed used to generate injections.")
+
 # add config options
 option_utils.add_config_opts_to_parser(parser)
 # add module pre-defined options
@@ -99,6 +108,43 @@ if opts.use_mpi:
     rank = MPI.COMM_WORLD.Get_rank()
     opts.verbose &= rank == 0
 pycbc.init_logging(opts.verbose)
+
+# set output path if condor checkpointing is enabled
+if opts.condor_checkpoint:
+    logging.info("Condor checkpointing is enabled")
+    condor_iwd = os.environ['_CONDOR_JOB_IWD'] + '/'
+
+    # check to see if checkpoint files exist in working directory already
+    ckpt_fname = opts.output_file + '.checkpoint'
+    bkup_fname = opts.output_file + '.bkup'
+    ckpt_iwd_path = condor_iwd + ckpt_fname
+    bkup_iwd_path = condor_iwd + bkup_fname
+    if not all([os.path.exists(p) for p in [ckpt_iwd_path, bkup_iwd_path]]):
+        logging.info("One or both resume files not found in working directory, checking staging directory")
+        my_spool_dir = '/home/daniel.finstad/projects/pycbc-pisn-paper/run/spool{}/'.format(opts.inj_seed)
+        ckpt_spool_path = my_spool_dir + ckpt_fname
+        bkup_spool_path = my_spool_dir + bkup_fname
+        if os.path.exists(ckpt_spool_path):
+            logging.info("Staged checkpoint file found, copying to working directory")
+            shutil.copy(ckpt_spool_path, ckpt_iwd_path)
+        if os.path.exists(bkup_spool_path):
+            logging.info("Staged backup file found, copying to working directory")
+            shutil.copy(bkup_spool_path, bkup_iwd_path)
+        if not any([os.path.exists(p) for p in [ckpt_iwd_path, bkup_iwd_path]]):
+            logging.info("No resume files found, starting from scratch")
+        else:
+            logging.info("Resuming from previous state")
+    else:
+        logging.info("Resuming from previous state")
+
+    logging.info("Condor working directory is {}".format(condor_iwd))
+    condor_outfile = condor_iwd + opts.output_file
+    logging.info("Setting output file to {}".format(condor_outfile))
+    old_output = opts.output_file
+    opts.output_file = condor_outfile
+    logging.info("Creating empty output file")
+    with open(opts.output_file, 'a') as fp:
+        pass
 
 # verify options are sane
 fft.verify_fft_options(opts, parser)
@@ -204,6 +250,22 @@ os.rename(sampler.checkpoint_file, opts.output_file)
 if not opts.save_backup:
     logging.info("Deleting backup file")
     os.remove(sampler.backup_file)
+
+# make empty checkpoint file and copy output back to where worflow
+# expects to find it
+if opts.condor_checkpoint:
+    logging.info("Making empty checkpoint and bkup files for transfer out")
+    with open(opts.output_file + '.checkpoint', 'a') as fp:
+        pass
+    with open(opts.output_file + '.bkup', 'a') as fp:
+        pass
+    stripped_outfile = opts.output_file.split('/')[-1]
+    new_outfile = '/'.join([os.getcwd(), stripped_outfile])
+    if opts.output_file != new_outfile:
+        logging.info("Copying output file to {}".format(new_outfile))
+        shutil.copy(opts.output_file, new_outfile)
+    logging.info("Trying to force exit with code 0")
+    sys.exit(0)
 
 # exit
 logging.info("Done")
