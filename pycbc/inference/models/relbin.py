@@ -48,7 +48,7 @@ class Relative(BaseDataModel):
                  ra, dec, tc, low_frequency_cutoff,
                  high_frequency_cutoff, lambda_tilde=0.,
                  epsilon=0.1, **kwargs):
-        super(IASRelative, self).__init__(data=data, **kwargs)
+        super(Relative, self).__init__(data=data, **kwargs)
         # define things
         f_lo = float(low_frequency_cutoff)
         f_hi = float(high_frequency_cutoff)
