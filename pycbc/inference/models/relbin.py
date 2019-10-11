@@ -278,7 +278,7 @@ class Relative(BaseDataModel):
         fp : pycbc.inference.io.BaseInferenceFile instance
             The inference file to write to.
         """
-        super(IASRelative, self).write_metadata(fp)
+        super(Relative, self).write_metadata(fp)
         if self._psds is not None:
             fp.write_psd(self._psds)
         try:
