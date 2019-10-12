@@ -9,7 +9,6 @@ from pycbc.waveform.imr_phenomd import generate
 from pycbc.detector import Detector
 from pycbc.conversions import eta_from_mass1_mass2
 from pycbc.types import Array
-from imr_phenomd import generate
 
 from .base_data import BaseDataModel
 
