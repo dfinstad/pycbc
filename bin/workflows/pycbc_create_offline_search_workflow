@@ -643,7 +643,11 @@ for inj_file, tag in zip(inj_files, inj_tags):
 
     # if running relative binning workflow, do found injection followup
     if args.relbin_workflow:
-        logging.info("Placeholder for foundinj minifollowup")
+        logging.info("Setting up found-inj minifollowups for relative binning workflow")
+        wf.setup_foundinj_minifollowups(workflow, found_inj, small_inj_file,
+                                        insps,  hdfbank[0], insp_files_seg_file,
+                                        data_analysed_name, trig_generated_name,
+                                        'daxes', currdir, tags=['SNR_SERIES'])
 
     # If option given, make throughput plots
     if workflow.cp.has_option_tags('workflow-matchedfilter',
