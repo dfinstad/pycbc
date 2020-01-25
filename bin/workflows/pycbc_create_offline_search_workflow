@@ -60,6 +60,9 @@ parser.add_argument('--version', action='version', version=__version__)
 parser.add_argument('--workflow-name', default='my_unamed_run')
 parser.add_argument("-d", "--output-dir", default=None,
                     help="Path to output directory.")
+parser.add_argument("--relbin-workflow", action="store_true",
+                    help="Run found injection followup to produce "
+                    "SNR time series for relative binning PE.")
 wf.add_workflow_command_line_group(parser)
 args = parser.parse_args()
 
@@ -637,6 +640,10 @@ for inj_file, tag in zip(inj_files, inj_tags):
                                      insps, hdfbank[0], insp_files_seg_file,
                                      data_analysed_name, trig_generated_name,
                                      'daxes', currdir, tags=[tag])
+
+    # if running relative binning workflow, do found injection followup
+    if args.relbin_workflow:
+        logging.info("Placeholder for foundinj minifollowup")
 
     # If option given, make throughput plots
     if workflow.cp.has_option_tags('workflow-matchedfilter',
