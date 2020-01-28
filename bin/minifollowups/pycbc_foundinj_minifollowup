@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os, logging, h5py, copy
+import numpy
 import pycbc.workflow as wf
 import pycbc.workflow.pegasus_workflow as wdax
 from pycbc.detector import Detector
@@ -69,16 +70,12 @@ for ifo in args.single_detector_triggers:
 # grab found injection indices
 f = h5py.File(args.injection_file, 'r')
 found = f['found_after_vetoes/injection_index'][:]
-# FIXME generalize this to multi-ifo
-l1_tc = f['found_after_vetoes/time1'][:]
-h1_tc = f['found_after_vetoes/time2'][:]
-#ifo_numbers = {v: str(k).split('detector_')[1] for k, v
-#               in f.attrs.items() if v in workflow.ifos}
-#tc_dict = {ifo: f['found_after_vetoes/time{}'.format(ifo_numbers[ifo])][:]
-#           for ifo in workflow.ifos}
+
+tc_dict = {ifo: f['found_after_vetoes/{}/time'.format(ifo)][:] for ifo in
+           workflow.ifos}
 
 # loop over found injections to follow up
-for idx, l1t, h1t in zip(found, l1_tc, h1_tc):
+for i, idx in enumerate(found):
     files = wf.FileList([])
     time = f['injections/end_time'][idx]
     ifo_times = ''
@@ -90,12 +87,7 @@ for idx, l1t, h1t in zip(found, l1_tc, h1_tc):
         det = Detector(ifo)
         lon = f['injections/longitude'][idx]
         lat = f['injections/latitude'][idx]
-        #ifo_time = time + det.time_delay_from_earth_center(lon, lat, time)
-        # modified to center snr timeseries on trigger time instead of injection
-        if ifo.lower() == 'l1':
-            ifo_time = l1t
-        elif ifo.lower() == 'h1':
-            ifo_time = h1t
+        ifo_time = tc_dict[ifo][i]
         ifo_times += ' %s:%s ' % (ifo, ifo_time)
         inj_params[ifo+'_end_time'] = ifo_time
 
@@ -103,6 +95,7 @@ for idx, l1t, h1t in zip(found, l1_tc, h1_tc):
         single_fname = args.single_detector_triggers[curr_ifo]
         hd_sngl = SingleDetTriggers(single_fname, args.bank_file, None, None,
                                     None, curr_ifo)
+
         end_times = hd_sngl.end_time
         # Use SNR here or NewSNR??
         snr = hd_sngl.snr
@@ -111,26 +104,26 @@ for idx, l1t, h1t in zip(found, l1_tc, h1_tc):
         if len(snr[lgc_mask]) == 0:
             continue
 
-        snr_idx = hd_sngl.mask[lgc_mask][snr[lgc_mask].argmax()]
-        hd_sngl.mask = hd_sngl.mask[snr_idx]
+        snr_idx = numpy.arange(len(lgc_mask))[lgc_mask][snr[lgc_mask].argmax()]
+        hd_sngl.mask = [snr_idx]
         curr_params = copy.deepcopy(inj_params)
-        curr_params['mass1'] = hd_sngl.mass1
-        curr_params['mass2'] = hd_sngl.mass2
-        curr_params['spin1z'] = hd_sngl.spin1z
-        curr_params['spin2z'] = hd_sngl.spin2z
-        curr_params['f_lower'] = hd_sngl.f_lower
+        curr_params['mass1'] = hd_sngl.mass1[0]
+        curr_params['mass2'] = hd_sngl.mass2[0]
+        curr_params['spin1z'] = hd_sngl.spin1z[0]
+        curr_params['spin2z'] = hd_sngl.spin2z[0]
+        curr_params['f_lower'] = hd_sngl.f_lower[0]
         # don't require precessing template info if not present
         try:
-            curr_params['spin1x'] = hd_sngl.spin1x
-            curr_params['spin2x'] = hd_sngl.spin2x
-            curr_params['spin1y'] = hd_sngl.spin1y
-            curr_params['spin2y'] = hd_sngl.spin2y
-            curr_params['inclination'] = hd_sngl.inclination
+            curr_params['spin1x'] = hd_sngl.spin1x[0]
+            curr_params['spin2x'] = hd_sngl.spin2x[0]
+            curr_params['spin1y'] = hd_sngl.spin1y[0]
+            curr_params['spin2y'] = hd_sngl.spin2y[0]
+            curr_params['inclination'] = hd_sngl.inclination[0]
         except KeyError:
             pass
         try:
             # Only present for precessing search
-            curr_params['u_vals'] = hd_sngl.u_vals
+            curr_params['u_vals'] = hd_sngl.u_vals[0]
         except:
             pass
 
