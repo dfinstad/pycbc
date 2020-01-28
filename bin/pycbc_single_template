@@ -100,6 +100,10 @@ parser.add_argument("--minimum-chisq-bins", default=0, type=int, help=
 parser.add_argument("--trigger-time", type=float, default=None,
                   help="Time used as centre point for the time series "
                        "calculated. Required with --window option")
+parser.add_argument("--exact-center", action="store_true",
+                    help="Make the trigger time the exact center sample "
+                         "in the SNR timeseries. This means the timeseries "
+                         "will necessarily have odd length.")
 parser.add_argument("--use-params-of-closest-injection", action="store_true",
                   default=False,
                   help="If given, use the injection with end_time closest to "
@@ -356,6 +360,8 @@ with ctx:
         if start_time_wind > start_time:
             start_time = start_time_wind
         end_time_wind = opt.trigger_time + opt.window
+        if opt.exact_center:
+            end_time_wind += 1. / float(opt.sample_rate)
         if end_time_wind < end_time:
             end_time = end_time_wind
 
