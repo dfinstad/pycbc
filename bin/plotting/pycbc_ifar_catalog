@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/home/daniel.finstad/opt/pycbc-dev/bin/python
 # Copyright (C) 2015-2019 Christopher M. Biwer, Thomas Dent
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -38,7 +38,7 @@ parser.add_argument('--trigger-files', nargs='+',
                     help='Path to coincident trigger HDF file(s)')
 parser.add_argument('--output-file', required=True,
                     help='Path to output plot')
-parser.add_argument('--truncate-threshold', type=float,
+parser.add_argument('--truncate-threshold', type=float, default=100000.,
                     help='Truncate plot above IFAR threshold (units: years)')
 parser.add_argument('--remove-threshold', type=float,
                     help='Remove detected events with IFAR above threshold'
@@ -145,7 +145,7 @@ fore_cumnum = numpy.arange(len(fore_ifar), 0, -1)
 
 # get expected (noise-only) foreground IFAR values and cumulative number for
 # each IFAR value
-expected_ifar = numpy.logspace(-4., numpy.log10(opts.truncate_threshold) or 5,
+expected_ifar = numpy.logspace(-4., numpy.log10(opts.truncate_threshold),
                                num=1000, base=10.0)
 fg_time = 0
 for f in trigf:
