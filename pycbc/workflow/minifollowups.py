@@ -472,6 +472,10 @@ def make_single_template_plots(workflow, segs, data_read_name, analyzed_name,
     files = FileList([])
     for tag in secs:
         for ifo in workflow.ifos:
+            # skip IFOs that didn't contribute to coinc
+            if params[ifo + '_end_time'] == -1.0:
+                logging.info("Skipping {} because not in coinc".format(ifo))
+                continue
             # Reanalyze the time around the trigger in each detector
             node = SingleTemplateExecutable(workflow.cp, 'single_template',
                                             ifos=[ifo], out_dir=out_dir,

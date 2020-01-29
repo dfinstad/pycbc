@@ -80,18 +80,11 @@ for i, idx in enumerate(found):
     time = f['injections/end_time'][idx]
     ifo_times = ''
     inj_params = {}
-    skip_ifos = []
     for val in ['mass1', 'mass2', 'spin1z', 'spin2z', 'end_time']:
         inj_params[val] = f['injections/%s' %(val,)][idx]
     for single in single_triggers:
         ifo = single.ifo
         ifo_time = tc_dict[ifo][i]
-        # skip ifos that did not participate in coinc
-        logging.info("IFO: {}, tc: {}".format(ifo, ifo_time))
-        if ifo_time == -1.0:
-            logging.info("Adding {} to skip_ifos")
-            skip_ifos.append(ifo)
-            continue
         det = Detector(ifo)
         lon = f['injections/longitude'][idx]
         lat = f['injections/latitude'][idx]
@@ -99,10 +92,6 @@ for i, idx in enumerate(found):
         inj_params[ifo+'_end_time'] = ifo_time
 
     for curr_ifo in args.single_detector_triggers:
-        logging.info("Current IFO is {}".format(curr_ifo))
-        if curr_ifo in skip_ifos:
-            logging.info("Current IFO is in skip_ifos, skipping")
-            continue
         single_fname = args.single_detector_triggers[curr_ifo]
         hd_sngl = SingleDetTriggers(single_fname, args.bank_file, None, None,
                                     None, curr_ifo)
