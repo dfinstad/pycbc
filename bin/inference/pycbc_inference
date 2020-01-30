@@ -22,6 +22,7 @@ import os
 import argparse
 import logging
 import shutil
+import h5py
 
 import numpy
 import healpy
@@ -125,18 +126,22 @@ with ctx:
     # setup relbin workflow if necessary
     if opts.relbin_workflow:
         logging.info("Running relative binning workflow analysis")
-        inj_idx = int(opts.injection_file.split('_')[:-4])
+        inj_file = os.path.basename(cp.get('data', 'injection-file'))
+        inj_idx = int(inj_file.split('_')[1][:-4])
+        ifos = cp.get('data', 'instruments').split()
         # get template id and inj params for diagnostic
         logging.info("Reading injfind file")
         with h5py.File(opts.injfind_file, 'r') as fp:
             found = list(fp['found_after_vetoes/injection_index'][:])
             found_idx = found.index(inj_idx)
             times = [fp['found_after_vetoes/{}/time'.format(ifo)][found_idx]
-                     for ifo in opts.instruments]
+                     for ifo in ifos]
             t_idx = fp['found_after_vetoes/template_id'][found_idx]
             inj_params = {k: v[inj_idx] for k, v in fp['injections'].items()}
         # set ref tc as average of trigger times
-        ref_params = {'tc': np.mean([t for t in times if t != -1.0])}
+        ref_params = {'tc': numpy.mean([t for t in times if t != -1.0])}
+        tc_min = ref_params['tc'] - 0.15
+        tc_max = ref_params['tc'] + 0.15
         logging.info("Injection parameters:")
         for k, v in inj_params.items():
             logging.info("{} = {}".format(k, v))
@@ -172,18 +177,19 @@ with ctx:
         logging.info("Fiducial parameters:")
         for k, v in ref_params.items():
             logging.info("{} = {}".format(k, v))
-            cp.set('model', k, str(v))
+            cp.set('model', str(k) + '_ref', str(v))
         # set skyloc and tc prior bounds in config
         logging.info("Setting RA bounds to {}, {}".format(ra_min, ra_max))
         cp.set('prior-ra', 'name', 'uniform_angle')
-        cp.set('prior-ra', 'min-ra', ra_min / numpy.pi)
-        cp.set('prior-ra', 'max-ra', ra_max / numpy.pi)
+        cp.set('prior-ra', 'min-ra', str(ra_min / numpy.pi))
+        cp.set('prior-ra', 'max-ra', str(ra_max / numpy.pi))
         logging.info("Setting dec bounds to {}, {}".format(dec_min, dec_max))
         cp.set('prior-dec', 'name', 'cos_angle')
-        cp.set('prior-dec', 'min-dec', dec_min / numpy.pi)
-        cp.set('prior-dec', 'max-dec', dec_max / numpy.pi)
-        cp.set('prior-tc', 'min-tc', ref_params['tc'] - 0.15)
-        cp.set('prior-tc', 'max-tc', ref_params['tc'] + 0.15)
+        cp.set('prior-dec', 'min-dec', str(dec_min / numpy.pi))
+        cp.set('prior-dec', 'max-dec', str(dec_max / numpy.pi))
+        logging.info("Setting tc bounds to {}, {}".format(tc_min, tc_max))
+        cp.set('prior-tc', 'min-tc', str(tc_min))
+        cp.set('prior-tc', 'max-tc', str(tc_max))
 
     # create an empty checkpoint file, if needed
     condor_ckpt = cp.has_option('sampler', 'checkpoint-signal')
