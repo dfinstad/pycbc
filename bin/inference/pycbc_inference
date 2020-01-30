@@ -24,6 +24,7 @@ import logging
 import shutil
 
 import numpy
+import healpy
 
 import pycbc
 from pycbc import (distributions, transforms, fft,
@@ -68,6 +69,19 @@ parser.add_argument("--samples-file", default=None,
 parser.add_argument("--seed", type=int, default=0,
                     help="Seed to use for the random number generator that "
                          "initially distributes the walkers. Default is 0.")
+# relative binning workflow options
+parser.add_argument("--relbin-workflow", action="store_true",
+                    help="Switch to indicate relative binning workflow "
+                         "analysis. Will read search pipeline output and "
+                         "set config options and prior bounds accordingly.")
+parser.add_argument("--skymap-file", type=str,
+                    help="Bayestar sky localization FITS file from a search "
+                         "pipeline injection.")
+parser.add_argument("--template-bank-file", type=str,
+                    help="Template bank hdf file that was used in search "
+                         "pipeline.")
+parser.add_argument("--injfind-file", type=str,
+                    help="HDFINJFIND file from search pipeline.")
 # add config options
 configuration.add_workflow_command_line_group(parser)
 # add module pre-defined options
@@ -108,6 +122,69 @@ with ctx:
     # read configuration file
     cp = configuration.WorkflowConfigParser.from_cli(opts)
 
+    # setup relbin workflow if necessary
+    if opts.relbin_workflow:
+        logging.info("Running relative binning workflow analysis")
+        inj_idx = int(opts.injection_file.split('_')[:-4])
+        # get template id and inj params for diagnostic
+        logging.info("Reading injfind file")
+        with h5py.File(opts.injfind_file, 'r') as fp:
+            found = list(fp['found_after_vetoes/injection_index'][:])
+            found_idx = found.index(inj_idx)
+            times = [fp['found_after_vetoes/{}/time'.format(ifo)][found_idx]
+                     for ifo in opts.instruments]
+            t_idx = fp['found_after_vetoes/template_id'][found_idx]
+            inj_params = {k: v[inj_idx] for k, v in fp['injections'].items()}
+        # set ref tc as average of trigger times
+        ref_params = {'tc': np.mean([t for t in times if t != -1.0])}
+        logging.info("Injection parameters:")
+        for k, v in inj_params.items():
+            logging.info("{} = {}".format(k, v))
+        # get template params
+        logging.info("Reading template bank file")
+        with h5py.File(opts.template_bank_file, 'r') as fp:
+            bank_params = fp.attrs['parameters']
+            ref_params.update({p: fp[p][t_idx] for p in bank_params if
+                               p not in ['f_lower', 'template_hash']})
+        # read skymap
+        logging.info("Reading skymap file")
+        hpx = healpy.read_map(opts.skymap_file, verbose=False)
+        nside = healpy.npix2nside(len(hpx))
+        total_prob = numpy.sum(hpx)
+        sort_idx = numpy.argsort(hpx)
+        # find all pixels in 95% confidence region
+        skyloc95_pix = sort_idx[numpy.cumsum(numpy.array(hpx)[sort_idx]) >=
+                                0.05 * total_prob]
+        # convert to ra and dec
+        skyloc95_ang = healpy.pix2ang(nside, skyloc95_pix)
+        dec = 0.5 * numpy.pi - skyloc95_ang[0]
+        ra = skyloc95_ang[1]
+        mean_ra = 0.5 * (min(ra) + max(ra))
+        mean_dec = 0.5 * (min(dec) + max(dec))
+        ref_params.update({'ra': mean_ra, 'dec': mean_dec})
+        # get skyloc bounds with minimum fallback if necessary
+        ra_min = min(ra) if max(ra) - min(ra) >= 0.5 else mean_ra - 0.25
+        ra_max = max(ra) if max(ra) - min(ra) >= 0.5 else mean_ra + 0.25
+        dec_min = min(dec) if max(dec) - min(dec) >= 0.25 else mean_dec - 0.125
+        dec_max = max(dec) if max(dec) - min(dec) >= 0.25 else mean_dec + 0.125
+        # set fiducial waveform params in config
+        logging.info("Setting fiducial parameters and prior bounds")
+        logging.info("Fiducial parameters:")
+        for k, v in ref_params.items():
+            logging.info("{} = {}".format(k, v))
+            cp.set('model', k, str(v))
+        # set skyloc and tc prior bounds in config
+        logging.info("Setting RA bounds to {}, {}".format(ra_min, ra_max))
+        cp.set('prior-ra', 'name', 'uniform_angle')
+        cp.set('prior-ra', 'min-ra', ra_min / numpy.pi)
+        cp.set('prior-ra', 'max-ra', ra_max / numpy.pi)
+        logging.info("Setting dec bounds to {}, {}".format(dec_min, dec_max))
+        cp.set('prior-dec', 'name', 'cos_angle')
+        cp.set('prior-dec', 'min-dec', dec_min / numpy.pi)
+        cp.set('prior-dec', 'max-dec', dec_max / numpy.pi)
+        cp.set('prior-tc', 'min-tc', ref_params['tc'] - 0.15)
+        cp.set('prior-tc', 'max-tc', ref_params['tc'] + 0.15)
+
     # create an empty checkpoint file, if needed
     condor_ckpt = cp.has_option('sampler', 'checkpoint-signal')
     if condor_ckpt:
@@ -116,7 +193,7 @@ with ctx:
                 cp.get('sampler', 'checkpoint-signal')))
         # create an empty output file to keep condor happy
         open(opts.output_file, 'a').close()
-    
+
     logging.info("Setting up model")
 
     # construct class that will return the natural logarithm of likelihood
@@ -155,7 +232,7 @@ with ctx:
     # Run the sampler
     sampler.run()
 
-    # Finalize the output 
+    # Finalize the output
     sampler.finalize()
 
 if condor_ckpt:
