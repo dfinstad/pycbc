@@ -665,6 +665,45 @@ class PhaseTDSGStatistic(PhaseTDStatistic):
         self.get_newsnr = ranking.get_newsnr_sgveto
 
 
+class PhaseTDNewSGStatistic(PhaseTDNewStatistic):
+    """PhaseTDNewStatistic but with sine-Gaussian veto added to the
+
+    single-detector ranking
+    """
+    def __init__(self, files=None, ifos=None, **kwargs):
+        PhaseTDNewStatistic.__init__(self, files=files, ifos=ifos, **kwargs)
+        self.get_newsnr = ranking.get_newsnr_sgveto
+
+    def coinc_multiifo(self, s, slide, step, to_shift,
+                       **kwargs): # pylint:disable=unused-argument
+        """Calculate the coincident detection statistic.
+
+        Parameters
+        ----------
+        s: list
+            List of (ifo, single detector statistic) tuples
+        slide: (unused in this statistic)
+        step: (unused in this statistic)
+        to_shift: list
+            List of integers indicating what multiples of the time shift will
+        be applied (unused in this statistic)
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of coincident ranking statistic values
+        """
+        # FIXME is this correct??
+        shift = slide * step
+        stats = {sngl[0]: sngl[1] for sngl in s}
+        rstat = sum([v['snglstat'] ** 2. for v in stats.values()])
+        cstat = rstat + 2. * self.logsignalrate_multiifo(
+                    stats, shift, to_shift)
+        cstat[cstat < 0] = 0
+        logging.info("Coinc stat: %s" % cstat ** 0.5)
+        return cstat ** 0.5
+
+
 class ExpFitStatistic(NewSNRStatistic):
     """Detection statistic using an exponential falloff noise model.
 
@@ -1206,6 +1245,7 @@ statistic_dict = {
     'newsnr_cut': NewSNRCutStatistic,
     'phasetd_newsnr': PhaseTDStatistic,
     'phasetd_newsnr_sgveto': PhaseTDSGStatistic,
+    'phasetdnew_newsnr_sgveto': PhaseTDNewSGStatistic,
     'exp_fit_stat': ExpFitStatistic,
     'exp_fit_csnr': ExpFitCombinedSNR,
     'exp_fit_sg_csnr': ExpFitSGCombinedSNR,
