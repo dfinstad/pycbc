@@ -23,6 +23,7 @@ import argparse
 import logging
 import shutil
 import h5py
+import time
 
 import numpy
 import healpy
@@ -35,6 +36,7 @@ from pycbc.waveform import generator
 from pycbc import __version__
 from pycbc import inference
 from pycbc.inference import (models, burn_in, option_utils)
+from pycbc.detector import Detector
 from pycbc.workflow import configuration
 
 # command line usage
@@ -126,7 +128,14 @@ with ctx:
     # setup relbin workflow if necessary
     if opts.relbin_workflow:
         logging.info("Running relative binning workflow analysis")
-        inj_file = os.path.basename(cp.get('data', 'injection-file'))
+        # try to avoid race condition in config file
+        for i in range(3):
+            try:
+                inj_file = os.path.basename(cp.get('data', 'injection-file'))
+            except:
+                logging.info("Failed to read config file on try {}".format(i+1))
+                time.sleep(0.1)
+                continue
         inj_idx = int(inj_file.split('_')[1][:-4])
         ifos = cp.get('data', 'instruments').split()
         # get template id and inj params for diagnostic
@@ -134,14 +143,10 @@ with ctx:
         with h5py.File(opts.injfind_file, 'r') as fp:
             found = list(fp['found_after_vetoes/injection_index'][:])
             found_idx = found.index(inj_idx)
-            times = [fp['found_after_vetoes/{}/time'.format(ifo)][found_idx]
-                     for ifo in ifos]
+            times = {ifo: fp['found_after_vetoes/{}/time'.format(ifo)][found_idx]
+                     for ifo in ifos}
             t_idx = fp['found_after_vetoes/template_id'][found_idx]
             inj_params = {k: v[inj_idx] for k, v in fp['injections'].items()}
-        # set ref tc as average of trigger times
-        ref_params = {'tc': numpy.mean([t for t in times if t != -1.0])}
-        tc_min = ref_params['tc'] - 0.15
-        tc_max = ref_params['tc'] + 0.15
         logging.info("Injection parameters:")
         for k, v in inj_params.items():
             logging.info("{} = {}".format(k, v))
@@ -149,8 +154,8 @@ with ctx:
         logging.info("Reading template bank file")
         with h5py.File(opts.template_bank_file, 'r') as fp:
             bank_params = fp.attrs['parameters']
-            ref_params.update({p: fp[p][t_idx] for p in bank_params if
-                               p not in ['f_lower', 'template_hash']})
+            ref_params = {p: fp[p][t_idx] for p in bank_params if
+                          p not in ['f_lower', 'template_hash']}
         # read skymap
         logging.info("Reading skymap file")
         hpx = healpy.read_map(opts.skymap_file, verbose=False)
@@ -172,6 +177,13 @@ with ctx:
         ra_max = max(ra) if max(ra) - min(ra) >= 0.5 else mean_ra + 0.25
         dec_min = min(dec) if max(dec) - min(dec) >= 0.25 else mean_dec - 0.125
         dec_max = max(dec) if max(dec) - min(dec) >= 0.25 else mean_dec + 0.125
+        # set ref tc as average of trigger times
+        tcs = [times[ifo] - Detector(ifo).time_delay_from_earth_center(
+                   mean_ra, mean_dec, times[ifo]) for ifo in times if
+               times[ifo] != -1.0]
+        ref_params['tc'] = numpy.mean(tcs)
+        tc_min = ref_params['tc'] - 0.2
+        tc_max = ref_params['tc'] + 0.2
         # set fiducial waveform params in config
         logging.info("Setting fiducial parameters and prior bounds")
         logging.info("Fiducial parameters:")
