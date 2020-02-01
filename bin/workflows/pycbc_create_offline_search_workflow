@@ -132,9 +132,9 @@ for ifo in workflow.ifos:
     # override science segs for relbin workflow since it's fake data
     if args.relbin_workflow:
         logging.info("Setting %s valid science segment to (%s, %s)" % (ifo, s, e))
-        ssegs[ifo] = segments.segmentlist([segments.segment(s, e)])
-    else:
-        ssegs[ifo] = science_seg_file.segment_dict["%s:science" % ifo]
+        sub_seglist = segments.segmentlist([segments.segment(s, e)])
+        science_seg_file.segment_dict["%s:science" % ifo] = sub_seglist
+    ssegs[ifo] = science_seg_file.segment_dict["%s:science" % ifo]
 
 datafind_files, analyzable_file, analyzable_segs, analyzable_name = \
                                            wf.setup_datafind_workflow(workflow,
