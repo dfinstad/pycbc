@@ -157,30 +157,32 @@ with ctx:
             ref_params = {p: fp[p][t_idx] for p in bank_params if
                           p not in ['f_lower', 'template_hash']}
         # read skymap
-        logging.info("Reading skymap file")
-        hpx = healpy.read_map(opts.skymap_file, verbose=False)
-        nside = healpy.npix2nside(len(hpx))
-        total_prob = numpy.sum(hpx)
-        sort_idx = numpy.argsort(hpx)
-        # find all pixels in 95% confidence region
-        skyloc95_pix = sort_idx[numpy.cumsum(numpy.array(hpx)[sort_idx]) >=
-                                0.05 * total_prob]
-        # convert to ra and dec
-        skyloc95_ang = healpy.pix2ang(nside, skyloc95_pix)
-        dec = 0.5 * numpy.pi - skyloc95_ang[0]
-        ra = skyloc95_ang[1]
-        mean_ra = 0.5 * (min(ra) + max(ra))
-        mean_dec = 0.5 * (min(dec) + max(dec))
+        if opts.skymap_file:
+            logging.info("Reading skymap file")
+            hpx = healpy.read_map(opts.skymap_file, verbose=False)
+            nside = healpy.npix2nside(len(hpx))
+            total_prob = numpy.sum(hpx)
+            sort_idx = numpy.argsort(hpx)
+            # find all pixels in 95% confidence region
+            skyloc95_pix = sort_idx[numpy.cumsum(numpy.array(hpx)[sort_idx]) >=
+                                    0.05 * total_prob]
+            # convert to ra and dec
+            skyloc95_ang = healpy.pix2ang(nside, skyloc95_pix)
+            dec = 0.5 * numpy.pi - skyloc95_ang[0]
+            ra = skyloc95_ang[1]
+            mean_ra = 0.5 * (min(ra) + max(ra))
+            mean_dec = 0.5 * (min(dec) + max(dec))
+            # get skyloc bounds with minimum fallback if necessary
+            ra_min = min(ra) if max(ra) - min(ra) >= 0.5 else mean_ra - 0.25
+            ra_max = max(ra) if max(ra) - min(ra) >= 0.5 else mean_ra + 0.25
+            dec_min = min(dec) if max(dec) - min(dec) >= 0.25 else mean_dec - 0.125
+            dec_max = max(dec) if max(dec) - min(dec) >= 0.25 else mean_dec + 0.125
+        else:
+            mean_ra = numpy.pi
+            mean_dec = 0.0
         ref_params.update({'ra': mean_ra, 'dec': mean_dec})
-        # get skyloc bounds with minimum fallback if necessary
-        ra_min = min(ra) if max(ra) - min(ra) >= 0.5 else mean_ra - 0.25
-        ra_max = max(ra) if max(ra) - min(ra) >= 0.5 else mean_ra + 0.25
-        dec_min = min(dec) if max(dec) - min(dec) >= 0.25 else mean_dec - 0.125
-        dec_max = max(dec) if max(dec) - min(dec) >= 0.25 else mean_dec + 0.125
         # set ref tc as average of trigger times
-        tcs = [times[ifo] - Detector(ifo).time_delay_from_earth_center(
-                   mean_ra, mean_dec, times[ifo]) for ifo in times if
-               times[ifo] != -1.0]
+        tcs = [times[ifo] for ifo in times if times[ifo] != -1.0]
         ref_params['tc'] = numpy.mean(tcs)
         tc_min = ref_params['tc'] - 0.2
         tc_max = ref_params['tc'] + 0.2
@@ -190,15 +192,16 @@ with ctx:
         for k, v in ref_params.items():
             logging.info("{} = {}".format(k, v))
             cp.set('model', str(k) + '_ref', str(v))
-        # set skyloc and tc prior bounds in config
-        logging.info("Setting RA bounds to {}, {}".format(ra_min, ra_max))
         cp.set('prior-ra', 'name', 'uniform_angle')
-        cp.set('prior-ra', 'min-ra', str(ra_min / numpy.pi))
-        cp.set('prior-ra', 'max-ra', str(ra_max / numpy.pi))
-        logging.info("Setting dec bounds to {}, {}".format(dec_min, dec_max))
         cp.set('prior-dec', 'name', 'cos_angle')
-        cp.set('prior-dec', 'min-dec', str(dec_min / numpy.pi))
-        cp.set('prior-dec', 'max-dec', str(dec_max / numpy.pi))
+        if opts.skymap_file:
+            # set skyloc and tc prior bounds in config
+            logging.info("Setting RA bounds to {}, {}".format(ra_min, ra_max))
+            cp.set('prior-ra', 'min-ra', str(ra_min / numpy.pi))
+            cp.set('prior-ra', 'max-ra', str(ra_max / numpy.pi))
+            logging.info("Setting dec bounds to {}, {}".format(dec_min, dec_max))
+            cp.set('prior-dec', 'min-dec', str(dec_min / numpy.pi))
+            cp.set('prior-dec', 'max-dec', str(dec_max / numpy.pi))
         logging.info("Setting tc bounds to {}, {}".format(tc_min, tc_max))
         cp.set('prior-tc', 'min-tc', str(tc_min))
         cp.set('prior-tc', 'max-tc', str(tc_max))
