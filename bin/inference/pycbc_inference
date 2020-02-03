@@ -133,8 +133,8 @@ with ctx:
             try:
                 inj_file = os.path.basename(cp.get('data', 'injection-file'))
             except:
-                logging.info("Failed to read config file on try {}".format(i+1))
-                time.sleep(0.1)
+                logging.info("Process {} failed to read config file on try {}".format(rank, i+1))
+                time.sleep(0.5 * rank)
                 continue
         inj_idx = int(inj_file.split('_')[1][:-4])
         ifos = cp.get('data', 'instruments').split()
