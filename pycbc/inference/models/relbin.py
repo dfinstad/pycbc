@@ -187,7 +187,7 @@ class RelativeSPA(BaseGaussianNoise):
 
         # generate fiducial waveform
         logging.info("Generating fiducial waveform")
-        hp = spa_tmplt(f_lower=kmins[0]*self.df, f_upper=(kmaxs[0]+1)*self.df,
+        hp = spa_tmplt(f_lower=kmins[0]*self.df, f_upper=(kmaxs[0]+2)*self.df,
                        delta_f=self.df, mass1=self.mass1_ref,
                        mass2=self.mass2_ref, spin1z=self.spin1z_ref,
                        spin2z=self.spin2z_ref, distance=1.,
