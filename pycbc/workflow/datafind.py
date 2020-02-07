@@ -32,6 +32,7 @@ https://ldas-jobs.ligo.caltech.edu/~cbc/docs/pycbc/ahope/datafind.html
 from __future__ import print_function
 import os, copy
 import logging
+import glob
 from ligo import segments
 from glue import lal
 from glue.ligolw import utils, table, lsctables, ligolw
@@ -955,6 +956,18 @@ def run_datafind_instance(cp, outputDir, connection, observatory, frameType,
     logging.info("Asking datafind server for frames.")
     dfCache = connection.find_frame_urls(observatory, frameType,
                                         startTime, endTime, **dfKwargs)
+    # if cache is empty, check CVMFS
+    if not dfCache:
+        logging.info("Checking CVMFS location")
+        globstr = "/cvmfs/gwosc.osgstorage.org/gwdata/*/*/"
+        globstr += "frame.v1/{}/*/{}-{}-*.gwf"
+        # grab all frames matching requested type
+        all_frames = glob.glob(globstr.format(ifo, observatory, frameType))
+        # filter to only frames covering requested times
+        filtered_frame_locs = [
+            f for f in all_frames if int(f.split('-')[-2]) < endTime and
+            int(f.split('-')[-2]) + int(f.split('-')[-1][:-4]) > startTime]
+        dfCache = lal.Cache.from_urls(filtered_frame_locs)
     logging.info("Frames returned")
     # workflow format output file
     cache_file = File(ifo, 'DATAFIND', seg, extension='lcf',
