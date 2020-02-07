@@ -325,6 +325,17 @@ def frame_paths(frame_type, start_time, end_time, server=None, url_type='file'):
                           gpsstart=start_time, gpsend=end_time)
     cache = connection.find_frame_urls(site, frame_type, start_time, end_time,urltype=url_type)
     paths = [entry.path for entry in cache]
+    # if no frames found, check CVMFS
+    if not paths:
+        logging.info("Checking CVMFS location")
+        globstr = "/cvmfs/gwosc.osgstorage.org/gwdata/*/*/"
+        globstr += "frame.v1/*/*/{}-{}-*.gwf"
+        # grab all frames matching requested type
+        all_frames = glob.glob(globstr.format(site, frame_type))
+        # filter to only frames covering requested times
+        paths = [
+            f for f in all_frames if int(f.split('-')[-2]) < end_time and
+            int(f.split('-')[-2]) + int(f.split('-')[-1][:-4]) > start_time]
     return paths
 
 def query_and_read_frame(frame_type, channels, start_time, end_time,
