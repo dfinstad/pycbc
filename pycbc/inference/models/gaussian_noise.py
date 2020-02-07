@@ -428,7 +428,7 @@ class BaseGaussianNoise(BaseDataModel):
         # back the noise term that canceled in the log likelihood ratio
         return self.loglr + self.lognl
 
-    def write_metadata(self, fp):
+    def write_metadata(self, fp, save_stilde=True):
         """Adds writing the psds and lognl, since it's a constant.
 
         The lognl is written to the sample group's ``attrs``.
@@ -443,7 +443,8 @@ class BaseGaussianNoise(BaseDataModel):
         fp : pycbc.inference.io.BaseInferenceFile instance
             The inference file to write to.
         """
-        super(BaseGaussianNoise, self).write_metadata(fp)
+        super(BaseGaussianNoise, self).write_metadata(
+            fp, save_stilde=save_stilde)
         # write the analyzed detectors and times
         fp.attrs['analyzed_detectors'] = self.detectors
         for det, data in self.data.items():
