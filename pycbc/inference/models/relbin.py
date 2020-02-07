@@ -175,6 +175,7 @@ class RelativeSPA(BaseGaussianNoise):
         self.ra_ref = float(ra_ref)
         self.dec_ref = float(dec_ref)
         self.tc_ref = float(tc_ref)
+        self.save_stilde = 'save_stilde' in kwargs
 
         # get detector-specific arrival times relative to end of data
         dt = {ifo:
@@ -330,7 +331,8 @@ class RelativeSPA(BaseGaussianNoise):
         fp : pycbc.inference.io.BaseInferenceFile instance
             The inference file to write to.
         """
-        super(RelativeSPA, self).write_metadata(fp)
+        super(RelativeSPA, self).write_metadata(
+            fp, save_stilde=self.save_stilde)
         fp.attrs['mass1_ref'] = self.mass1_ref
         fp.attrs['mass2_ref'] = self.mass2_ref
         fp.attrs['spin1z_ref'] = self.spin1z_ref
