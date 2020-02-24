@@ -92,6 +92,7 @@ class MultinestSampler(BaseSampler):
         self._dlogz = None
         self._importance_logz = None
         self._importance_dlogz = None
+        self._stat_cache = {}
         self.is_main_process = is_main_process()
 
     @property
@@ -160,12 +161,17 @@ class MultinestSampler(BaseSampler):
         """
         stats = []
         for sample in self._samples:
-            params = dict(zip(self.model.variable_params, sample))
-            if self.model.sampling_transforms is not None:
-                params = self.model.sampling_transforms.apply(params)
-            self.model.update(**params)
-            self.model.logposterior
-            stats.append(self.model.get_current_stats())
+            try:
+                stats.append(self._stat_cache[tuple(sample)])
+            except KeyError:
+                params = dict(zip(self.model.variable_params, sample))
+                if self.model.sampling_transforms is not None:
+                    params = self.model.sampling_transforms.apply(params)
+                self.model.update(**params)
+                self.model.logposterior
+                stats.append(self.model.get_current_stats())
+                # cache stats for faster load in the future
+                self._stat_cache[tuple(sample)] = stats[-1]
         stats = numpy.array(stats)
         return {s: stats[:, i] for i, s in enumerate(self.model.default_stats)}
 
