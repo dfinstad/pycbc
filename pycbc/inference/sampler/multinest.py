@@ -31,6 +31,7 @@ from __future__ import absolute_import
 import logging
 import sys
 import numpy
+from mpi4py import MPI
 
 from pycbc.inference.io import (MultinestFile, validate_checkpoint_files)
 from pycbc.distributions import read_constraints_from_config
@@ -159,29 +160,17 @@ class MultinestSampler(BaseSampler):
     def model_stats(self):
         """A dict mapping the model's ``default_stats`` to arrays of values.
         """
-        # get past loglikelihoods from multinest file
-        samples_file = self.backup_file[:-9] + '-.txt'
-        past_samples = numpy.loadtxt(samples_file)
-        loglikes = {tuple(s): -0.5 * l for s, l in
-                    zip(past_samples[:, 2:], past_samples[:, 1])}
         stats = []
         for sample in self._samples:
             try:
                 stats.append(self._stat_cache[tuple(sample)])
             except KeyError:
-                # grab stored loglikelihood to avoid recalculating
-                stat_buffer = {'loglikelihood': loglikes[tuple(sample)]}
                 params = dict(zip(self.model.variable_params, sample))
                 if self.model.sampling_transforms is not None:
                     params = self.model.sampling_transforms.apply(params)
-                # recalculate other stats since they don't get stored
                 self.model.update(**params)
-                stat_buffer.update({'logprior': self.model.logprior,
-                                    'logjacobian': self.model.logjacobian,
-                                    'lognl': self.model.lognl})
-                loglr = stat_buffer['loglikelihood'] - stat_buffer['lognl']
-                stat_buffer['loglr'] = loglr
-                stats.append([stat_buffer[s] for s in self.model.default_stats])
+                self.model.logposterior
+                stats.append(self.model.get_current_stats())
                 # cache stats for faster load in the future
                 self._stat_cache[tuple(sample)] = stats[-1]
         stats = numpy.array(stats)
@@ -243,6 +232,11 @@ class MultinestSampler(BaseSampler):
                 not all([c(params) for c in self._constraints])):
             return -numpy.inf
         self.model.update(**params)
+        # calculate all stats and cache for faster load when checkpointing
+        self.model.logposterior
+        nparams = len(self.model.variable_params)
+        sample = tuple([cube[i] for i in range(nparams)])
+        self._stat_cache[sample] = self.model.get_current_stats()
         return self.model.loglikelihood
 
     def transform_prior(self, cube, *extra_args):
@@ -303,9 +297,16 @@ class MultinestSampler(BaseSampler):
             # make sure there's at least 1 posterior sample
             if self._samples.shape[0] == 0:
                 continue
+            # consolidate stat caches
+            caches = MPI.COMM_WORLD.gather(self._stat_cache, root=0)
             # dump the current results
             if self.is_main_process:
+                for cache in caches:
+                    self._stat_cache.update(cache)
                 self.checkpoint()
+            else:
+                # clear cache to free up memory on worker processes
+                self._stat_cache.clear()
             # check if we're finished
             done = self.check_if_finished()
         if not self.is_main_process:
