@@ -159,17 +159,29 @@ class MultinestSampler(BaseSampler):
     def model_stats(self):
         """A dict mapping the model's ``default_stats`` to arrays of values.
         """
+        # get past loglikelihoods from multinest file
+        samples_file = self.backup_file[:-9] + '-.txt'
+        past_samples = numpy.loadtxt(samples_file)
+        loglikes = {tuple(s): -0.5 * l for s, l in
+                    zip(past_samples[:, 2:], past_samples[:, 1])}
         stats = []
         for sample in self._samples:
             try:
                 stats.append(self._stat_cache[tuple(sample)])
             except KeyError:
+                # grab stored loglikelihood to avoid recalculating
+                stat_buffer = {'loglikelihood': loglikes[tuple(sample)]}
                 params = dict(zip(self.model.variable_params, sample))
                 if self.model.sampling_transforms is not None:
                     params = self.model.sampling_transforms.apply(params)
+                # recalculate other stats since they don't get stored
                 self.model.update(**params)
-                self.model.logposterior
-                stats.append(self.model.get_current_stats())
+                stat_buffer.update({'logprior': self.model.logprior,
+                                    'logjacobian': self.model.logjacobian,
+                                    'lognl': self.model.lognl})
+                loglr = stat_buffer['loglikelihood'] - stat_buffer['lognl']
+                stat_buffer['loglr'] = loglr
+                stats.append([stat_buffer[s] for s in self.model.default_stats])
                 # cache stats for faster load in the future
                 self._stat_cache[tuple(sample)] = stats[-1]
         stats = numpy.array(stats)
