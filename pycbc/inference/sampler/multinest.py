@@ -298,6 +298,7 @@ class MultinestSampler(BaseSampler):
             if self._samples.shape[0] == 0:
                 continue
             # consolidate stat caches
+            logging.info("Consolidating likelihood stat cache")
             caches = MPI.COMM_WORLD.gather(self._stat_cache, root=0)
             # dump the current results
             if self.is_main_process:
