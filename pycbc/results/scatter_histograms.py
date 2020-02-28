@@ -297,7 +297,7 @@ def create_marginalized_hist(ax, values, label, percentiles=None,
                              linestyle='-',
                              title=True, expected_value=None,
                              expected_color='red', rotated=False,
-                             plot_min=None, plot_max=None):
+                             plot_min=None, plot_max=None, vstack_labels=False):
     """Plots a 1D marginalized histogram of the given param from the given
     samples.
 
@@ -405,7 +405,8 @@ def create_marginalized_hist(ax, values, label, percentiles=None,
         else:
 
             # sets colored title for marginal histogram
-            set_marginal_histogram_title(ax, fmt, color, label=label)
+            set_marginal_histogram_title(ax, fmt, color, label=label,
+                                         vstack_labels=vstack_labels)
 
             # Remove y-ticks
             ax.set_yticks([])
@@ -420,7 +421,8 @@ def create_marginalized_hist(ax, values, label, percentiles=None,
             ax.set_xlim(xmin, xmax)
 
 
-def set_marginal_histogram_title(ax, fmt, color, label=None, rotated=False):
+def set_marginal_histogram_title(ax, fmt, color, label=None, rotated=False,
+                                 vstack_labels=False):
     """ Sets the title of the marginal histograms.
 
     Parameters
@@ -450,9 +452,11 @@ def set_marginal_histogram_title(ax, fmt, color, label=None, rotated=False):
         yscale = 1.05
 
     # get class that packs text boxes vertical or horizonitally
-    packer_class = offsetbox.VPacker if rotated else offsetbox.HPacker
+    packer_class = offsetbox.VPacker if (rotated or vstack_labels) else \
+                   offsetbox.HPacker
 
     # if no title exists
+    align = "bottom" if not vstack_labels else "right"
     if not hasattr(ax, "title_boxes"):
 
         # create a text box
@@ -467,7 +471,7 @@ def set_marginal_histogram_title(ax, fmt, color, label=None, rotated=False):
 
         # pack text boxes
         ybox = packer_class(children=ax.title_boxes,
-                            align="bottom", pad=0, sep=5)
+                            align=align, pad=0, sep=5)
 
     # else append existing title
     else:
@@ -484,9 +488,15 @@ def set_marginal_histogram_title(ax, fmt, color, label=None, rotated=False):
 
         # pack text boxes
         ybox = packer_class(children=ax.title_boxes,
-                            align="bottom", pad=0, sep=5)
+                            align=align, pad=0, sep=5)
 
     # add new title and keep reference to instance as an attribute
+    if vstack_labels and len(ax.title_boxes) > 1:
+        yscale += 0.075 * len(ax.title_boxes) + 0.097 * (len(ax.title_boxes) - 2)
+        #renderer = ybox.figure._cachedRenderer
+        #_, tbox_height, _, _ = tbox1.get_extent(renderer)
+        #print("tbox height is {}".format(tbox_height))
+        #yscale += len(ax.title_boxes) * tbox_height
     anchored_ybox = offsetbox.AnchoredOffsetbox(
                       loc=2, child=ybox, pad=0.,
                       frameon=False, bbox_to_anchor=(xscale, yscale),
@@ -506,7 +516,8 @@ def create_multidim_plot(parameters, samples, labels=None,
                          density_cmap='viridis',
                          contour_color=None, hist_color='black',
                          line_color=None, fill_color='gray',
-                         use_kombine=False, fig=None, axis_dict=None):
+                         use_kombine=False, fig=None, axis_dict=None,
+                         vstack_labels=False, no_offset=False):
     """Generate a figure with several plots and histograms.
 
     Parameters
@@ -638,20 +649,21 @@ def create_multidim_plot(parameters, samples, labels=None,
         maxs = {p: val for p, val in maxs.items()}
 
     # remove common offsets
-    for pi, param in enumerate(parameters):
-        values, offset = remove_common_offset(samples[param])
-        if offset != 0:
-            # we'll add the offset removed to the label
-            labels[param] = '{} - {:d}'.format(labels[param], offset)
-            samples[param] = values
-            mins[param] = mins[param] - float(offset)
-            maxs[param] = maxs[param] - float(offset)
-        # also remove from expected parameters, if they were provided
-        if expected_parameters is not None:
-            try:
-                expected_parameters[param] -= offset
-            except KeyError:
-                pass
+    if not no_offset:
+        for pi, param in enumerate(parameters):
+            values, offset = remove_common_offset(samples[param])
+            if offset != 0:
+                # we'll add the offset removed to the label
+                labels[param] = '{} - {:d}'.format(labels[param], offset)
+                samples[param] = values
+                mins[param] = mins[param] - float(offset)
+                maxs[param] = maxs[param] - float(offset)
+            # also remove from expected parameters, if they were provided
+            if expected_parameters is not None:
+                try:
+                    expected_parameters[param] -= offset
+                except KeyError:
+                    pass
 
     # create the axis grid
     if fig is None and axis_dict is None:
@@ -682,7 +694,7 @@ def create_multidim_plot(parameters, samples, labels=None,
                 title=marginal_title, expected_value=expected_value,
                 expected_color=expected_parameters_color,
                 rotated=rotated, plot_min=mins[param], plot_max=maxs[param],
-                percentiles=marginal_percentiles)
+                percentiles=marginal_percentiles, vstack_labels=vstack_labels)
 
     # Off-diagonals...
     for px, py in axis_dict:

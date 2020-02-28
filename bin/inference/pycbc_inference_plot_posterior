@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/home/daniel.finstad/opt/pycbc-dev/bin/python
 
 # Copyright (C) 2016 Miriam Cabero Mueller, Collin Capano
 #
@@ -32,7 +32,7 @@ import sys
 
 import numpy
 
-from matplotlib import (patches, use)
+from matplotlib import (patches, use, rcParams)
 
 import pycbc
 import pycbc.version
@@ -71,6 +71,16 @@ option_utils.add_scatter_option_group(parser)
 option_utils.add_density_option_group(parser)
 parser.add_argument('--dpi', type=int, default=200,
                     help="Set the DPI of the plot. Default is 200.")
+# add option to vertically stack hist labels
+parser.add_argument("--vstack-labels", action="store_true",
+                    help="Stack multiple labels for marginalized histogram "
+                         "vertically instead of horizontally.")
+parser.add_argument("--tight-layout", action="store_true",
+                    help="Save plot with tight layout.")
+parser.add_argument("--no-offset", action="store_true",
+                    help="Do not allow plot to remove offsets from parameter "
+                         "values, which can cause issues when plotting from "
+                         "multiple files.")
 
 # parse command line
 opts = parser.parse_args()
@@ -218,7 +228,8 @@ for (i, s) in enumerate(samples):
                     use_kombine=opts.use_kombine_kde,
                     mins=mins, maxs=maxs,
                     expected_parameters=expected_parameters,
-                    expected_parameters_color=opts.expected_parameters_color)
+                    expected_parameters_color=opts.expected_parameters_color,
+                    vstack_labels=opts.vstack_labels, no_offset=opts.no_offset)
 
 # plot the prior
 if opts.plot_prior:
@@ -241,15 +252,17 @@ if len(opts.input_file) > 1:
         label = opts.input_file_labels[fn]
         handles.append(patches.Patch(color=color, label=label))
         labels.append(label)
+    fsize = rcParams['font.size'] + 2 * len(opts.input_file)
     fig.legend(loc="upper right", handles=handles,
-               labels=labels)
+               labels=labels, fontsize=fsize)
 
 # set DPI
 fig.set_dpi(opts.dpi)
 
 # save
+fig_kwds = {} if not opts.tight_layout else {'bbox_inches': 'tight'}
 metadata.save_fig_with_metadata(
-                 fig, opts.output_file, {},
+                 fig, opts.output_file, fig_kwds=fig_kwds,
                  cmd=" ".join(sys.argv),
                  title="Posteriors",
                  caption="Posterior probability density functions.")
