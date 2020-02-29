@@ -342,6 +342,20 @@ class MultinestSampler(BaseSampler):
             self.write_results(f_n)
             with self.io(f_n, "a") as f_p:
                 f_p.write_niterations(self.niterations)
+        # clear master cache if too large
+        if len(self._stat_cache) > 15000:
+            logging.info("Filtering stat cache for highest loglikelihoods")
+            # sort by highest loglikelihood
+            loglikes = numpy.array(self._stat_cache.values())[:, 2]
+            sort_idx = numpy.argsort(loglikes)[::-1][:15000]
+            # build cache of 10k highest loglikelihood samples
+            filtered_samples = numpy.array(self._stat_cache.keys())[sort_idx]
+            temp_cache = {tuple(s): self._stat_cache[tuple(s)] for s in
+                          filtered_samples}
+            self._stat_cache.clear()
+            for k, v in temp_cache.items():
+                self._stat_cache[k] = v
+            del temp_cache
         logging.info("Validating checkpoint and backup files")
         checkpoint_valid = validate_checkpoint_files(
             self.checkpoint_file, self.backup_file)
