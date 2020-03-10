@@ -123,19 +123,18 @@ fft.from_cli(opts)
 with ctx:
 
     # read configuration file
-    cp = configuration.WorkflowConfigParser.from_cli(opts)
+    if not opts.use_mpi:
+        cp = configuration.WorkflowConfigParser.from_cli(opts)
+    else:
+        if rank == 0:
+            cp = configuration.WorkflowConfigParser.from_cli(opts)
+        else:
+            cp = None
+        cp = MPI.COMM_WORLD.bcast(cp, root=0)
 
     # setup relbin workflow if necessary
     if opts.relbin_workflow:
         logging.info("Running relative binning workflow analysis")
-        # try to avoid race condition in config file
-        for i in range(3):
-            try:
-                inj_file = os.path.basename(cp.get('data', 'injection-file'))
-            except:
-                logging.info("Process {} failed to read config file on try {}".format(rank, i+1))
-                time.sleep(0.5 * rank)
-                continue
         inj_idx = int(inj_file.split('_')[1][:-4])
         ifos = cp.get('data', 'instruments').split()
         # get template id and inj params for diagnostic
