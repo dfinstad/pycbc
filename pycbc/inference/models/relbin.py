@@ -244,7 +244,7 @@ class RelativeSPA(BaseGaussianNoise):
         # calculate coefficients
         sdat = {}
         for ifo in self.data:
-            hd = numpy.conjugate(self.comp_data[ifo]) * h0[ifo]
+            hd = self.comp_data[ifo] * numpy.conjugate(h0[ifo])
             hd /= self.comp_psds[ifo]
             hh = (numpy.absolute(h0[ifo]) ** 2.0) / self.comp_psds[ifo]
             # constant terms
@@ -253,13 +253,14 @@ class RelativeSPA(BaseGaussianNoise):
             b0 = numpy.array([4. * self.df * numpy.sum(hh[l:h]) for
                               l, h in self.bins])
             # linear terms
-            bin_centers = [0.5 * (fl + fh) for fl, fh in self.fbins]
+            bin_lefts = [fl for fl, fh in self.fbins]
             a1 = numpy.array([4. * self.df
-                              * numpy.sum(hd[l:h] * (self.f[l:h] - bc)) for
-                              (l, h), bc in zip(self.bins, bin_centers)])
+                              * numpy.sum(hd[l:h] * (self.f[l:h] - bl)) for
+                              (l, h), bl in zip(self.bins, bin_lefts)])
             b1 = numpy.array([4. * self.df
-                              * numpy.sum(hh[l:h] * (self.f[l:h] - bc)) for
-                              (l, h), bc in zip(self.bins, bin_centers)])
+                              * numpy.sum(hh[l:h] * (self.f[l:h] - bl)) for
+                              (l, h), bl in zip(self.bins, bin_lefts)])
+
 
             sdat[ifo] = {'a0': a0, 'a1': a1,
                          'b0': b0, 'b1': b1}
@@ -279,8 +280,8 @@ class RelativeSPA(BaseGaussianNoise):
         htarget *= htf
         # compute waveform ratio and timeshift
         shift = numpy.exp(-2.0j * numpy.pi * self.fedges * dtc)
-        r = htarget / self.h00_sparse * shift
-        r0 = 0.5 * (r[:-1] + r[1:])
+        r = numpy.conjugate(htarget / self.h00_sparse * shift)
+        r0 = r[:-1]
         r1 = (r[1:] - r[:-1]) / (self.fedges[1:] - self.fedges[:-1])
         return numpy.array([r0, r1], dtype=numpy.complex128)
 
