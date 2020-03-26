@@ -305,7 +305,8 @@ class RelativeSPA(BaseGaussianNoise):
         p = self.current_params.copy()
         p.update(self.static_params)
 
-        llr = 0.
+        hh = 0.
+        hd = 0j
         for ifo in self.data:
             # get detector antenna pattern
             fp, fc = self.det[ifo].antenna_pattern(p['ra'], p['dec'],
@@ -314,23 +315,24 @@ class RelativeSPA(BaseGaussianNoise):
             ip = numpy.cos(p['inclination'])
             ic = 0.5 * (1.0 + ip * ip)
             htf = (fp * ip + 1.0j * fc * ic) / p['distance']
-            # get timeshift relative to fiducial waveform
+            # get timeshift relative to end of data
             dt = self.det[ifo].time_delay_from_earth_center(p['ra'], p['dec'],
                                                             p['tc'])
-            dtc = p['tc'] + dt - self.end_time - self.ta[ifo]
+            dtc = p['tc'] + dt - self.end_time
             # generate template and calculate waveform ratio
+            # FIXME debug ###########
             r0, r1 = self.waveform_ratio(p, htf, dtc=dtc)
-            # <h, d> is real part of sum over bins of A0r0 + A1r1
-            hd = numpy.sum(self.sdat[ifo]['a0'] * r0
-                           + self.sdat[ifo]['a1'] * r1).real
-            # marginalize over phase
-            hd = numpy.log(special.i0e(hd)) + abs(hd)
-            # <h, h> is real part of sum over bins of B0|r0|^2 + 2B1Re(r1r0*)
-            hh = numpy.sum(self.sdat[ifo]['b0'] * numpy.absolute(r0) ** 2.
+            # FIXME debug ###########
+
+            # <h, d> is sum over bins of A0r0 + A1r1
+            hd += numpy.sum(self.sdat[ifo]['a0'] * r0
+                            + self.sdat[ifo]['a1'] * r1)
+            # <h, h> is sum over bins of B0|r0|^2 + 2B1Re(r1r0*)
+            hh += numpy.sum(self.sdat[ifo]['b0'] * numpy.absolute(r0) ** 2.
                            + 2. * self.sdat[ifo]['b1']
-                           * (r1 * numpy.conjugate(r0)).real).real
-            # increment loglr
-            llr += (hd - 0.5 * hh)
+                           * (r1 * numpy.conjugate(r0)).real)
+        hd = abs(hd)
+        llr = numpy.log(special.i0e(hd)) + hd - 0.5 * hh
         return float(llr)
 
     def write_metadata(self, fp):
