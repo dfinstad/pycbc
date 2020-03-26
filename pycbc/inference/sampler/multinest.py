@@ -343,12 +343,13 @@ class MultinestSampler(BaseSampler):
             with self.io(f_n, "a") as f_p:
                 f_p.write_niterations(self.niterations)
         # clear master cache if too large
-        if len(self._stat_cache) > 15000:
+        cache_max = 100000
+        if len(self._stat_cache) > cache_max:
             logging.info("Filtering stat cache for highest loglikelihoods")
             # sort by highest loglikelihood
             loglike_idx = self.model.default_stats.index('loglikelihood')
             loglikes = numpy.array(self._stat_cache.values())[:, loglike_idx]
-            sort_idx = numpy.argsort(loglikes)[::-1][:15000]
+            sort_idx = numpy.argsort(loglikes)[::-1][:cache_max]
             # build cache of 10k highest loglikelihood samples
             filtered_samples = numpy.array(self._stat_cache.keys())[sort_idx]
             temp_cache = {tuple(s): self._stat_cache[tuple(s)] for s in
