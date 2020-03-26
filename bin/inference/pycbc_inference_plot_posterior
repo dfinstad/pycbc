@@ -81,6 +81,8 @@ parser.add_argument("--no-offset", action="store_true",
                     help="Do not allow plot to remove offsets from parameter "
                          "values, which can cause issues when plotting from "
                          "multiple files.")
+parser.add_argument("--no-contour-labels", action="store_true",
+                    help="Do not put percentile labels on contours.")
 
 # parse command line
 opts = parser.parse_args()
@@ -229,7 +231,8 @@ for (i, s) in enumerate(samples):
                     mins=mins, maxs=maxs,
                     expected_parameters=expected_parameters,
                     expected_parameters_color=opts.expected_parameters_color,
-                    vstack_labels=opts.vstack_labels, no_offset=opts.no_offset)
+                    vstack_labels=opts.vstack_labels, no_offset=opts.no_offset,
+                    no_contour_labels=opts.no_contour_labels)
 
 # plot the prior
 if opts.plot_prior:

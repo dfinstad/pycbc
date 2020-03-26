@@ -163,7 +163,8 @@ def create_density_plot(xparam, yparam, samples, plot_density=True,
                         plot_contours=True, percentiles=None, cmap='viridis',
                         contour_color=None, xmin=None, xmax=None,
                         ymin=None, ymax=None, exclude_region=None,
-                        fig=None, ax=None, use_kombine=False):
+                        fig=None, ax=None, use_kombine=False,
+                        no_contour_labels=False):
     """Computes and plots posterior density and confidence intervals using the
     given samples.
 
@@ -284,10 +285,11 @@ def create_density_plot(xparam, yparam, samples, plot_density=True,
         ct = ax.contour(X, Y, Z, s, colors=contour_color, linewidths=lw,
                         zorder=3)
         # label contours
-        lbls = ['{p}%'.format(p=int(p)) for p in (100. - percentiles)]
-        fmt = dict(zip(ct.levels, lbls))
-        fs = 12
-        ax.clabel(ct, ct.levels, inline=True, fmt=fmt, fontsize=fs)
+        if not no_contour_labels:
+            lbls = ['{p}%'.format(p=int(p)) for p in (100. - percentiles)]
+            fmt = dict(zip(ct.levels, lbls))
+            fs = 12
+            ax.clabel(ct, ct.levels, inline=True, fmt=fmt, fontsize=fs)
 
     return fig, ax
 
@@ -517,7 +519,8 @@ def create_multidim_plot(parameters, samples, labels=None,
                          contour_color=None, hist_color='black',
                          line_color=None, fill_color='gray',
                          use_kombine=False, fig=None, axis_dict=None,
-                         vstack_labels=False, no_offset=False):
+                         vstack_labels=False, no_offset=False,
+                         no_contour_labels=False):
     """Generate a figure with several plots and histograms.
 
     Parameters
@@ -725,7 +728,7 @@ def create_multidim_plot(parameters, samples, labels=None,
                 contour_color=contour_color, xmin=mins[px], xmax=maxs[px],
                 ymin=mins[py], ymax=maxs[py],
                 exclude_region=exclude_region, ax=ax,
-                use_kombine=use_kombine)
+                use_kombine=use_kombine, no_contour_labels=no_contour_labels)
 
         if expected_parameters is not None:
             try:
