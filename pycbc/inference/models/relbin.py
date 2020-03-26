@@ -31,8 +31,9 @@ import numpy
 from scipy.interpolate import interp1d
 from scipy import special
 
-from pycbc.waveform.spa_tmplt import spa_tmplt
+from pycbc.waveform import get_fd_waveform_sequence
 from pycbc.detector import Detector
+from pycbc.types import Array
 
 from .gaussian_noise import BaseGaussianNoise
 
@@ -153,9 +154,9 @@ class RelativeSPA(BaseGaussianNoise):
 
     def __init__(self, variable_params, data, low_frequency_cutoff,
                  mass1_ref, mass2_ref, spin1z_ref, spin2z_ref,
-                 ra_ref, dec_ref, tc_ref, bin_debug=False,
-                 epsilon=0.5,
-                 **kwargs):
+                 ra_ref, dec_ref, tc_ref, lambda1_ref=0.0, lambda2_ref=0.0,
+                 inclination_ref=0.0, polarization_ref=0.0, epsilon=0.5,
+                 bin_debug=False, **kwargs):
         super(RelativeSPA, self).__init__(
             variable_params, data, low_frequency_cutoff, **kwargs)
         # check that all of the frequency cutoffs are the same
@@ -181,9 +182,13 @@ class RelativeSPA(BaseGaussianNoise):
         self.mass2_ref = float(mass2_ref)
         self.spin1z_ref = float(spin1z_ref)
         self.spin2z_ref = float(spin2z_ref)
+        self.lambda1_ref = float(lambda1_ref)
+        self.lambda2_ref = float(lambda2_ref)
         self.ra_ref = float(ra_ref)
         self.dec_ref = float(dec_ref)
         self.tc_ref = float(tc_ref)
+        self.inclination_ref = float(inclination_ref)
+        self.polarization_ref = float(polarization_ref)
         self.save_stilde = 'save_stilde' in kwargs
 
         # get detector-specific arrival times relative to end of data
@@ -196,30 +201,44 @@ class RelativeSPA(BaseGaussianNoise):
                    for ifo in self.data}
 
         # generate fiducial waveform
-        logging.info("Generating fiducial waveform")
-        hp = spa_tmplt(f_lower=kmins[0]*self.df, f_upper=(kmaxs[0]+2)*self.df,
-                       delta_f=self.df, mass1=self.mass1_ref,
-                       mass2=self.mass2_ref, spin1z=self.spin1z_ref,
-                       spin2z=self.spin2z_ref, distance=1.,
-                       spin_order=-1, phase_order=-1)
-        hp.resize(len(self.f))
-        self.h00 = numpy.array(hp)
+        f_lo = kmins[0] * self.df
+        f_hi = kmaxs[0] * self.df
+        logging.info("Generating fiducial waveform from %s to %s Hz",
+                     % (f_lo, f_hi))
+        # prune f=0 point so IMR doesn't complain
+        fpoints = Array(self.f.astype(numpy.float64))[1:]
+        fid_params = dict(mass1=self.mass1_ref, mass2=self.mass2_ref,
+                          spin1z=self.spin1z_ref, spin2z=self.spin2z_ref,
+                          lambda1=self.lambda1_ref, lambda2=self.lambda2_ref,
+                          inclination=self.inclination_ref,
+                          approximant=self.static_params['approximant'],
+                          sample_points=fpoints)
+        fid_hp, fid_hc = get_fd_waveform_sequence(**fid_params)
+        self.h00 = {}
+        for ifo in self.data:
+            # make copy of fiducial wfs, adding back in f=0
+            hp0 = numpy.concatenate([[0j], fid_hp.copy()])
+            hc0 = numpy.concatenate([[0j], fid_hc.copy()])
+            fp, fc = self.det[ifo].antenna_pattern(
+                self.ra_ref, self.dec_ref, self.polarization_ref, self.tc_ref)
+            tshift = numpy.exp(-2.0j * numpy.pi * self.f * self.ta[ifo])
+            self.h00[ifo] = numpy.array(hp0 * fp + hc0 * fc) * tshift
 
         # compute frequency bins
         logging.info("Computing frequency bins")
-        nbin, fbin, fbin_ind = setup_bins(f_full=self.f, f_lo=kmins[0]*self.df,
-                                          f_hi=kmaxs[0]*self.df,
+        nbin, fbin, fbin_ind = setup_bins(f_full=self.f, f_lo=f_lo, f_hi=f_hi,
                                           eps=self.epsilon, debug=bin_debug)
         logging.info("Using %s bins for this model", nbin)
         # store bins and edges in sample and frequency space
         self.edges = fbin_ind
-        self.fedges = numpy.array(fbin).astype(numpy.float32)
+        self.fedges = numpy.array(fbin).astype(numpy.float64)
         self.bins = numpy.array([(self.edges[i], self.edges[i+1]) for
                                  i in range(len(self.edges) - 1)])
         self.fbins = numpy.array([(fbin[i], fbin[i+1]) for
                                   i in range(len(fbin) - 1)])
         # store low res copy of fiducial waveform
-        self.h00_sparse = self.h00.copy().take(self.edges)
+        self.h00_sparse = {ifo: self.h00[ifo].copy().take(self.edges) for ifo
+                           in self.h00}
 
         # compute summary data
         logging.info("Calculating summary data at frequency resolution %s Hz",
@@ -237,16 +256,12 @@ class RelativeSPA(BaseGaussianNoise):
             containing bin coefficients a0, b0, a1, b1, for each frequency
             bin.
         """
-        # timeshift the fiducial waveform for each detector
-        shift = {ifo: numpy.exp(-2.0j * numpy.pi * self.f * self.ta[ifo]) for
-                 ifo in self.data}
-        h0 = {ifo: self.h00.copy() * shift[ifo] for ifo in self.data}
         # calculate coefficients
         sdat = {}
         for ifo in self.data:
-            hd = self.comp_data[ifo] * numpy.conjugate(h0[ifo])
+            hd = self.comp_data[ifo] * numpy.conjugate(self.h00[ifo])
             hd /= self.comp_psds[ifo]
-            hh = (numpy.absolute(h0[ifo]) ** 2.0) / self.comp_psds[ifo]
+            hh = (numpy.absolute(self.h00[ifo]) ** 2.0) / self.comp_psds[ifo]
             # constant terms
             a0 = numpy.array([4. * self.df * numpy.sum(hd[l:h]) for
                               l, h in self.bins])
@@ -260,7 +275,6 @@ class RelativeSPA(BaseGaussianNoise):
             b1 = numpy.array([4. * self.df
                               * numpy.sum(hh[l:h] * (self.f[l:h] - bl)) for
                               (l, h), bl in zip(self.bins, bin_lefts)])
-
 
             sdat[ifo] = {'a0': a0, 'a1': a1,
                          'b0': b0, 'b1': b1}
@@ -312,17 +326,19 @@ class RelativeSPA(BaseGaussianNoise):
             fp, fc = self.det[ifo].antenna_pattern(p['ra'], p['dec'],
                                                    p['polarization'],
                                                    p['tc'])
-            ip = numpy.cos(p['inclination'])
-            ic = 0.5 * (1.0 + ip * ip)
-            htf = (fp * ip + 1.0j * fc * ic) / p['distance']
             # get timeshift relative to end of data
             dt = self.det[ifo].time_delay_from_earth_center(p['ra'], p['dec'],
                                                             p['tc'])
             dtc = p['tc'] + dt - self.end_time
+            tshift = numpy.exp(-2.0j * numpy.pi * self.fedges * dtc)
             # generate template and calculate waveform ratio
-            # FIXME debug ###########
-            r0, r1 = self.waveform_ratio(p, htf, dtc=dtc)
-            # FIXME debug ###########
+            hp, hc = get_fd_waveform_sequence(
+                sample_points=Array(self.fedges), **p)
+            htilde = numpy.array(fp * hp + fc * hc) * tshift
+            r = numpy.conjugate(htilde / self.h00_sparse[ifo]).astype(
+                numpy.complex128)
+            r0 = r[:-1]
+            r1 = (r[1:] - r[:-1]) / (self.fedges[1:] - self.fedges[:-1])
 
             # <h, d> is sum over bins of A0r0 + A1r1
             hd += numpy.sum(self.sdat[ifo]['a0'] * r0
