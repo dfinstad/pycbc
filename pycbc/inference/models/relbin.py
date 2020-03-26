@@ -37,7 +37,7 @@ from pycbc.detector import Detector
 from .gaussian_noise import BaseGaussianNoise
 
 
-def setup_bins(f_full, f_lo, f_hi, chi=1.0, eps=0.5):
+def setup_bins(f_full, f_lo, f_hi, chi=1.0, eps=0.5, debug=False):
     """Construct frequency bins for use in a relative likelihood
     model. For details, see [Barak, Dai & Venumadhav 2018].
 
@@ -75,16 +75,25 @@ def setup_bins(f_full, f_lo, f_hi, chi=1.0, eps=0.5):
     dphi_diff = dphi - dphi[0]
     # now construct frequency bins
     nbin = int(dphi_diff[-1] / eps)
-    dphi2f = interp1d(dphi_diff, f, kind='slinear', bounds_error=False,
+    dphi2f = interp1d(dphi_diff, f, kind='linear', bounds_error=False,
                       fill_value=0.0)
     dphi_grid = numpy.linspace(dphi_diff[0], dphi_diff[-1], nbin+1)
     # frequency grid points
     fbin = dphi2f(dphi_grid)
     # indices of frequency grid points in the FFT array
-    fbin_ind = numpy.array([numpy.argmin(numpy.absolute(f_full - ff)) for
-                            ff in fbin])
+    fbin_ind = numpy.unique([numpy.argmin(numpy.absolute(f_full - ff)) for
+                             ff in fbin])
     # make sure grid points are precise
     fbin = numpy.array([f_full[i] for i in fbin_ind])
+    nbin = len(fbin)
+
+    if debug:
+        logging.warn("WARNING! Circumventing the binning algorithm for debug!")
+        mask = (f_full >= f_lo) & (f_full <= f_hi)
+        fbin_ind = numpy.array([i for i, v in enumerate(mask) if v])
+        fbin = f_full[mask]
+        nbin = len(fbin)
+
     return nbin, fbin, fbin_ind
 
 
@@ -144,7 +153,7 @@ class RelativeSPA(BaseGaussianNoise):
 
     def __init__(self, variable_params, data, low_frequency_cutoff,
                  mass1_ref, mass2_ref, spin1z_ref, spin2z_ref,
-                 ra_ref, dec_ref, tc_ref,
+                 ra_ref, dec_ref, tc_ref, bin_debug=False,
                  epsilon=0.5,
                  **kwargs):
         super(RelativeSPA, self).__init__(
@@ -200,7 +209,7 @@ class RelativeSPA(BaseGaussianNoise):
         logging.info("Computing frequency bins")
         nbin, fbin, fbin_ind = setup_bins(f_full=self.f, f_lo=kmins[0]*self.df,
                                           f_hi=kmaxs[0]*self.df,
-                                          eps=self.epsilon)
+                                          eps=self.epsilon, debug=bin_debug)
         logging.info("Using %s bins for this model", nbin)
         # store bins and edges in sample and frequency space
         self.edges = fbin_ind
