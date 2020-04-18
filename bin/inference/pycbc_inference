@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/home/daniel.finstad/opt/pycbc-dev/bin/python
 
 # Copyright (C) 2016 Christopher M. Biwer, Collin Capano
 #
@@ -37,6 +37,10 @@ from pycbc import __version__
 from pycbc import inference
 from pycbc.inference import (models, burn_in, option_utils)
 from pycbc.detector import Detector
+from pycbc.conversions import (mchirp_from_mass1_mass2,
+                               eta_from_mass1_mass2,
+                               mass1_from_mchirp_eta,
+                               mass2_from_mchirp_eta)
 from pycbc.workflow import configuration
 
 # command line usage
@@ -73,7 +77,7 @@ parser.add_argument("--seed", type=int, default=0,
                     help="Seed to use for the random number generator that "
                          "initially distributes the walkers. Default is 0.")
 # relative binning workflow options
-parser.add_argument("--relbin-workflow", action="store_true",
+parser.add_argument("--relbin-workflow", action="store_true", default=False,
                     help="Switch to indicate relative binning workflow "
                          "analysis. Will read search pipeline output and "
                          "set config options and prior bounds accordingly.")
@@ -85,6 +89,11 @@ parser.add_argument("--template-bank-file", type=str,
                          "pipeline.")
 parser.add_argument("--injfind-file", type=str,
                     help="HDFINJFIND file from search pipeline.")
+parser.add_argument("--timed", action="store_true",
+                    help="Record runtime in auxiliary txt file.")
+parser.add_argument("--use-inj-parameters", action="store_true", default=False,
+                    help="Run in diagnostic mode using injection values "
+                         "as fidcuial waveform parameters.")
 # add config options
 configuration.add_workflow_command_line_group(parser)
 # add module pre-defined options
@@ -94,6 +103,9 @@ scheme.insert_processing_option_group(parser)
 
 # parse command line
 opts = parser.parse_args()
+
+# set run start time in case we want to store it
+start_time = time.time()
 
 # setup log
 # If we're running in MPI mode, only allow the parent to print
@@ -135,8 +147,13 @@ with ctx:
     # setup relbin workflow if necessary
     if opts.relbin_workflow:
         logging.info("Running relative binning workflow analysis")
+        inj_path = cp.get('data', 'injection-file')
+        inj_file = os.path.basename(inj_path)
         inj_idx = int(inj_file.split('_')[1][:-4])
+
         ifos = cp.get('data', 'instruments').split()
+        ref_params = {}
+        times = {}
         # get template id and inj params for diagnostic
         logging.info("Reading injfind file")
         with h5py.File(opts.injfind_file, 'r') as fp:
@@ -146,9 +163,14 @@ with ctx:
                      for ifo in ifos}
             t_idx = fp['found_after_vetoes/template_id'][found_idx]
             inj_params = {k: v[inj_idx] for k, v in fp['injections'].items()}
+        inj_params['mchirp'] = mchirp_from_mass1_mass2(inj_params['mass1'],
+                                                       inj_params['mass2'])
+        inj_params['eta'] = eta_from_mass1_mass2(inj_params['mass1'],
+                                                 inj_params['mass2'])
+        # report injection parameters
         logging.info("Injection parameters:")
         for k, v in inj_params.items():
-            logging.info("{} = {}".format(k, v))
+            logging.info("{} = {:.5f}".format(k, v))
         # get template params
         logging.info("Reading template bank file")
         with h5py.File(opts.template_bank_file, 'r') as fp:
@@ -177,20 +199,84 @@ with ctx:
             dec_min = min(dec) if max(dec) - min(dec) >= 0.25 else mean_dec - 0.125
             dec_max = max(dec) if max(dec) - min(dec) >= 0.25 else mean_dec + 0.125
         else:
-            mean_ra = numpy.pi
-            mean_dec = 0.0
+            if cp.has_option('relbin_workflow', 'skyloc_debug'):
+                logging.warn("WARNING! Running in skyloc debug mode, using "
+                             "injection parameters for fiducial waveform")
+                mean_ra = inj_params['longitude']
+                mean_dec = inj_params['latitude']
+            else:
+                mean_ra = numpy.pi
+                mean_dec = 0.0
+
         ref_params.update({'ra': mean_ra, 'dec': mean_dec})
         # set ref tc as average of trigger times
         tcs = [times[ifo] for ifo in times if times[ifo] != -1.0]
         ref_params['tc'] = numpy.mean(tcs)
+        # check for diagnostic mode
+        if opts.use_inj_parameters:
+            logging.warn("WARNING! Running in diagnostic mode, using "
+                         "injection parameters for fiducial waveform")
+            pmap = {'dec': 'latitude', 'ra': 'longitude', 'tc': 'end_time'}
+            fidparams = ['mass1', 'mass2', 'spin1z', 'spin2z', 'ra', 'dec',
+                         'tc']
+            ref_params = {p: inj_params[p] if p in inj_params else
+                          inj_params[pmap[p]] for p in fidparams}
+        # add derived params (mchirp and eta)
+        ref_params['mchirp'] = mchirp_from_mass1_mass2(
+           ref_params['mass1'], ref_params['mass2'])
+        ref_params['eta'] = eta_from_mass1_mass2(
+           ref_params['mass1'], ref_params['mass2'])
         tc_min = ref_params['tc'] - 0.2
         tc_max = ref_params['tc'] + 0.2
         # set fiducial waveform params in config
         logging.info("Setting fiducial parameters and prior bounds")
         logging.info("Fiducial parameters:")
         for k, v in ref_params.items():
-            logging.info("{} = {}".format(k, v))
-            cp.set('model', str(k) + '_ref', str(v))
+            logging.info("{} = {:.5f}".format(k, v))
+            # don't pass in mchirp or eta
+            if k not in ['mchirp', 'eta']:
+                cp.set('model', str(k) + '_ref', str(v))
+        # set variable param prior bounds around best fit template
+        delta_mc = 1.5e-2
+        delta_eta = 2.5e-2
+        mc_min = ref_params['mchirp'] - delta_mc
+        mc_max = ref_params['mchirp'] + delta_mc
+        eta_min = ref_params['eta'] - delta_eta
+        eta_max = 0.25
+
+        if cp.has_option('relbin_workflow', 'mchirp_cut'):
+            logging.info("Setting mchirp constraint to {}, {}".format(mc_min, mc_max))
+            cp.set('constraint-1', 'constraint_arg',
+                   'mchirp_from_mass1_mass2(mass1,mass2) > {}'.format(mc_min))
+            cp.set('constraint-2', 'constraint_arg',
+                   'mchirp_from_mass1_mass2(mass1,mass2) < {}'.format(mc_max))
+        if cp.has_option('relbin_workflow', 'eta_cut'):
+            logging.info("Setting eta constraint to {}".format(eta_min))
+            cp.set('constraint-3', 'constraint_arg',
+                   'eta_from_mass1_mass2(mass1,mass2) > {}'.format(eta_min))
+
+        # if priors are in mchirp, eta
+        if cp.has_option('relbin_workflow', 'mchirp_eta_prior'):
+            logging.info("Setting mchirp bounds to {}, {}".format(mc_min, mc_max))
+            cp.set('prior-mchirp', 'min-mchirp', str(mc_min))
+            cp.set('prior-mchirp', 'max-mchirp', str(mc_max))
+            logging.info("Setting eta bounds to {}, {}".format(eta_min, eta_max))
+            cp.set('prior-eta', 'min-eta', str(eta_min))
+            cp.set('prior-eta', 'max-eta', str(eta_max))
+
+        # if priors are in m1, m2
+        if cp.has_option('relbin_workflow', 'm1m2_prior'):
+            m1_min = max(1., mass1_from_mchirp_eta(mc_min, eta_max))
+            m1_max = min(5., mass1_from_mchirp_eta(mc_max, eta_min))
+            m2_min = max(1., mass2_from_mchirp_eta(mc_min, eta_min))
+            m2_max = min(5., mass2_from_mchirp_eta(mc_max, eta_max))
+            logging.info("Setting mass1 bounds to {}, {}".format(m1_min, m1_max))
+            cp.set('prior-mass1', 'min-mass1', str(m1_min))
+            cp.set('prior-mass1', 'max-mass1', str(m1_max))
+            logging.info("Setting mass2 bounds to {}, {}".format(m2_min, m2_max))
+            cp.set('prior-mass2', 'min-mass2', str(m2_min))
+            cp.set('prior-mass2', 'max-mass2', str(m2_max))
+
         cp.set('prior-ra', 'name', 'uniform_angle')
         cp.set('prior-dec', 'name', 'cos_angle')
         if opts.skymap_file:
@@ -204,6 +290,27 @@ with ctx:
         logging.info("Setting tc bounds to {}, {}".format(tc_min, tc_max))
         cp.set('prior-tc', 'min-tc', str(tc_min))
         cp.set('prior-tc', 'max-tc', str(tc_max))
+
+    # set up non-workflow relbin inj run
+    if opts.use_inj_parameters and not opts.relbin_workflow:
+        # read injection file
+        logging.info("Reading injection file")
+        inj_file = cp.get('data', 'injection-file')
+        with h5py.File(inj_file, 'r') as fp:
+            inj_params = {k: v for k, v in fp.attrs.items()}
+        # report injection parameters
+        logging.info("Injection parameters:")
+        for k, v in inj_params.items():
+            if not isinstance(v, float):
+                continue
+            logging.info("{} = {:.5f}".format(k, v))
+        # set config model params
+        logging.info("Setting fiducial waveform params in config")
+        model_params = ['mass1', 'mass2', 'spin1z', 'spin2z', 'lambda1',
+                        'lambda2', 'tc', 'ra', 'dec', 'inclination',
+                        'polarization']
+        for p in model_params:
+            cp.set('model', '{}_ref'.format(p), str(inj_params[p]))
 
     # create an empty checkpoint file, if needed
     condor_ckpt = cp.has_option('sampler', 'checkpoint-signal')
@@ -272,6 +379,14 @@ if not opts.save_backup:
 if condor_ckpt:
    # create an empty checkpoint file
    open(sampler.checkpoint_file, 'a').close()
+
+# calculate run time and write to file if option given
+runtime = time.time() - start_time
+if opts.timed:
+    logging.info("Writing runtime file")
+    rtime_file = opts.output_file[:-4] + '_runtime.txt'
+    with open(rtime_file, 'w') as fp:
+        fp.write('{}\n'.format(runtime))
 
 # exit
 logging.info("Done")
