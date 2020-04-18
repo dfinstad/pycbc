@@ -428,7 +428,7 @@ class BaseGaussianNoise(BaseDataModel):
         # back the noise term that canceled in the log likelihood ratio
         return self.loglr + self.lognl
 
-    def write_metadata(self, fp, save_stilde=True):
+    def write_metadata(self, fp, save_stilde=True, save_psd=True):
         """Adds writing the psds and lognl, since it's a constant.
 
         The lognl is written to the sample group's ``attrs``.
@@ -447,12 +447,15 @@ class BaseGaussianNoise(BaseDataModel):
             fp, save_stilde=save_stilde)
         # write the analyzed detectors and times
         fp.attrs['analyzed_detectors'] = self.detectors
+        logging.info("Writing analysis segments to output file")
         for det, data in self.data.items():
             key = '{}_analysis_segment'.format(det)
             fp.attrs[key] = [float(data.start_time), float(data.end_time)]
-        if self._psds is not None:
+        if save_psd and self._psds is not None:
+            logging.info("Writing psds to output file")
             fp.write_psd(self._psds)
         # write the times used for psd estimation (if they were provided)
+        logging.info("Writing psd segments to output file")
         for det in self.psd_segments:
             key = '{}_psd_segment'.format(det)
             fp.attrs[key] = list(map(float, self.psd_segments[det]))
@@ -462,6 +465,7 @@ class BaseGaussianNoise(BaseDataModel):
             # group doesn't exist, create it
             fp.create_group(fp.samples_group)
             attrs = fp[fp.samples_group].attrs
+        logging.info("Calculating and storing lognl")
         attrs['lognl'] = self.lognl
         for det in self.detectors:
             # Save lognl for each IFO as attributes in the samples group
@@ -548,10 +552,23 @@ class BaseGaussianNoise(BaseDataModel):
         ignore_args += bool_args
         # load the data
         opts = data_opts_from_config(cp, data_section, flow)
-        strain_dict, psd_strain_dict = data_from_cli(opts, **data_args)
+        if cp.has_option('relbin_workflow', 'broadcast_strain'):
+            logging.info("Reading strain data on master process only")
+            from mpi4py import MPI
+            rank = MPI.COMM_WORLD.Get_rank()
+            if rank == 0:
+                strain_dict, psd_strain_dict = data_from_cli(opts, **data_args)
+            else:
+                strain_dict, psd_strain_dict = None, None
+            logging.info("Broadcasting strain data to worker processes")
+            strain_dict = MPI.COMM_WORLD.bcast(strain_dict, root=0)
+            psd_strain_dict = MPI.COMM_WORLD.bcast(psd_strain_dict, root=0)
+        else:
+            strain_dict, psd_strain_dict = data_from_cli(opts, **data_args)
         # convert to frequency domain and get psds
         stilde_dict, psds = fd_data_from_strain_dict(opts, strain_dict,
                                                      psd_strain_dict)
+
         # save the psd data segments if the psd was estimated from data
         if opts.psd_estimation is not None:
             _tdict = psd_strain_dict or strain_dict
