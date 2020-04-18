@@ -447,8 +447,19 @@ def from_cli_multi_ifos(opt, ifos, inj_filter_rejector_dict=None, **kwargs):
     if inj_filter_rejector_dict is None:
         inj_filter_rejector_dict = {ifo: None for ifo in ifos}
     for ifo in ifos:
+        logging.info("Generating {} strain".format(ifo))
         strain[ifo] = from_cli_single_ifo(opt, ifo,
                           inj_filter_rejector_dict[ifo], **kwargs)
+        # truncate time if running relbin workflow
+        if opt.truncated_start_time:
+            logging.info("Truncating {} strain data to ({}, {})".format(
+                ifo, opt.truncated_start_time, opt.truncated_end_time))
+            cstart = opt.truncated_start_time - opt.gps_start_time[ifo]
+            cend = opt.gps_end_time[ifo] - opt.truncated_end_time
+            strain_buffer = strain[ifo].crop(cstart, cend)
+            # clear memory
+            del strain[ifo]
+            strain[ifo] = strain_buffer
     return strain
 
 

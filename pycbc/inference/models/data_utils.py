@@ -98,6 +98,8 @@ def create_data_parser():
                              "If psd-inverse-length is provided, the given "
                              "end time will be padded by half that length "
                              "to account for wrap-around effects.")
+    parser.add_argument("--truncated-start-time", type=int)
+    parser.add_argument("--truncated-end-time", type=int)
     parser.add_argument("--psd-start-time", type=int, default=None,
                         nargs='+', action=MultiDetOptionAction,
                         metavar='IFO:TIME',
@@ -421,6 +423,7 @@ def data_from_cli(opts, check_for_valid_times=False,
 
     strain_dict = strain_from_cli_multi_ifos(opts, instruments,
                                              precision="double")
+
     # apply gates if not waiting to overwhiten
     if not opts.gate_overwhitened:
         strain_dict = apply_gates_to_td(strain_dict, gates)
