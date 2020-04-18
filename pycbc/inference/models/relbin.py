@@ -154,9 +154,6 @@ class Relative(BaseGaussianNoise):
 
     def __init__(self, variable_params, data, low_frequency_cutoff,
                  fiducial_params=None, epsilon=0.5, bin_debug=False, **kwargs):
-                 #mass1_ref, mass2_ref, spin1z_ref, spin2z_ref,
-                 #ra_ref, dec_ref, tc_ref, lambda1_ref=0.0, lambda2_ref=0.0,
-                 #inclination_ref=0.0, polarization_ref=0.0, epsilon=0.5,
         super(Relative, self).__init__(
             variable_params, data, low_frequency_cutoff, **kwargs)
         # check that all of the frequency cutoffs are the same
@@ -179,27 +176,6 @@ class Relative(BaseGaussianNoise):
         self.comp_psds = {ifo: p.numpy() for ifo, p in self.psds.items()}
         # store fiducial waveform params
         self.fid_params = fiducial_params
-        #self.mass1_ref = float(mass1_ref)
-        #self.mass2_ref = float(mass2_ref)
-        #self.spin1z_ref = float(spin1z_ref)
-        #self.spin2z_ref = float(spin2z_ref)
-        #self.lambda1_ref = float(lambda1_ref)
-        #self.lambda2_ref = float(lambda2_ref)
-        #self.ra_ref = float(ra_ref)
-        #self.dec_ref = float(dec_ref)
-        #self.tc_ref = float(tc_ref)
-        #self.inclination_ref = float(inclination_ref)
-        #self.polarization_ref = float(polarization_ref)
-        #self.save_stilde = 'save_stilde' in kwargs
-
-        # get detector-specific arrival times relative to end of data
-        #dt = {ifo:
-        #      self.det[ifo].time_delay_from_earth_center(self.ra_ref,
-        #                                                 self.dec_ref,
-        #                                                 self.tc_ref)
-        #      for ifo in self.data}
-        #self.ta = {ifo: self.tc_ref + dt[ifo] - self.end_time
-        #           for ifo in self.data}
 
         dt = {ifo:
               self.det[ifo].time_delay_from_earth_center(
@@ -211,26 +187,19 @@ class Relative(BaseGaussianNoise):
         # generate fiducial waveform
         f_lo = kmins[0] * self.df
         f_hi = kmaxs[0] * self.df
-        print("high-frequency-cutoff = {}".format(f_hi))
-        logging.info("Generating fiducial waveform from %s to %s Hz" % (f_lo, f_hi))
+        logging.info("Generating fiducial waveform from %s to %s Hz" %
+                     (f_lo, f_hi))
         # prune f=0 point so IMR doesn't complain
         fpoints = Array(self.f.astype(numpy.float64))[1:]
-        #fid_params = dict(mass1=self.mass1_ref, mass2=self.mass2_ref,
-        #                  spin1z=self.spin1z_ref, spin2z=self.spin2z_ref,
-        #                  lambda1=self.lambda1_ref, lambda2=self.lambda2_ref,
-        #                  inclination=self.inclination_ref,
-        #                  approximant=self.static_params['approximant'],
-        #                  sample_points=fpoints)
-        fid_hp, fid_hc = get_fd_waveform_sequence(
-            approximant=self.static_params['approximant'],
-            sample_points=fpoints, **self.fid_params)
+        approx = self.static_params['approximant']
+        fid_hp, fid_hc = get_fd_waveform_sequence(approximant=approx,
+                                                  sample_points=fpoints,
+                                                  **self.fid_params)
         self.h00 = {}
         for ifo in self.data:
             # make copy of fiducial wfs, adding back in f=0
             hp0 = numpy.concatenate([[0j], fid_hp.copy()])
             hc0 = numpy.concatenate([[0j], fid_hc.copy()])
-            #fp, fc = self.det[ifo].antenna_pattern(
-            #    self.ra_ref, self.dec_ref, self.polarization_ref, self.tc_ref)
             fp, fc = self.det[ifo].antenna_pattern(
                 self.fid_params['ra'], self.fid_params['dec'],
                 self.fid_params['polarization'], self.fid_params['tc'])
@@ -292,25 +261,6 @@ class Relative(BaseGaussianNoise):
             sdat[ifo] = {'a0': a0, 'a1': a1,
                          'b0': b0, 'b1': b1}
         return sdat
-
-    def waveform_ratio(self, p, htf, dtc=0.0):
-        """Calculate waveform ratio between template and fiducial
-        waveforms.
-        """
-        # generate template
-        hp = spa_tmplt(sample_points=self.fedges,
-                       mass1=p['mass1'], mass2=p['mass2'],
-                       spin1z=p['spin1z'], spin2z=p['spin2z'],
-                       distance=1., spin_order=-1, phase_order=-1)
-        htarget = numpy.array(hp)
-        # apply antenna pattern, inclination, and distance factor
-        htarget *= htf
-        # compute waveform ratio and timeshift
-        shift = numpy.exp(-2.0j * numpy.pi * self.fedges * dtc)
-        r = numpy.conjugate(htarget / self.h00_sparse * shift)
-        r0 = r[:-1]
-        r1 = (r[1:] - r[:-1]) / (self.fedges[1:] - self.fedges[:-1])
-        return numpy.array([r0, r1], dtype=numpy.complex128)
 
     def _loglr(self):
         r"""Computes the log likelihood ratio,
@@ -379,6 +329,8 @@ class Relative(BaseGaussianNoise):
 
     @staticmethod
     def extra_args_from_config(cp, section, skip_args=None, dtypes=None):
+        """Adds reading fiducial waveform parameters from config file.
+        """
         # add fiducial params to skip list
         skip_args += [option for option in cp.options(section) if
                       option.endswith('_ref')]
