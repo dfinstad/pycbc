@@ -98,7 +98,7 @@ def setup_bins(f_full, f_lo, f_hi, chi=1.0, eps=0.5, debug=False):
     return nbin, fbin, fbin_ind
 
 
-class RelativeSPA(BaseGaussianNoise):
+class Relative(BaseGaussianNoise):
     r"""Model that assumes the likelihood in a region around the peak
     is slowly varying such that a linear approximation can be made, and
     likelihoods can be calculated at a coarser frequency resolution. For
@@ -150,14 +150,14 @@ class RelativeSPA(BaseGaussianNoise):
         All other keyword arguments are passed to
         :py:class:`BaseGaussianNoise`.
     """
-    name = "relative_spa"
+    name = "relative"
 
     def __init__(self, variable_params, data, low_frequency_cutoff,
-                 mass1_ref, mass2_ref, spin1z_ref, spin2z_ref,
-                 ra_ref, dec_ref, tc_ref, lambda1_ref=0.0, lambda2_ref=0.0,
-                 inclination_ref=0.0, polarization_ref=0.0, epsilon=0.5,
-                 bin_debug=False, **kwargs):
-        super(RelativeSPA, self).__init__(
+                 fiducial_params=None, epsilon=0.5, bin_debug=False, **kwargs):
+                 #mass1_ref, mass2_ref, spin1z_ref, spin2z_ref,
+                 #ra_ref, dec_ref, tc_ref, lambda1_ref=0.0, lambda2_ref=0.0,
+                 #inclination_ref=0.0, polarization_ref=0.0, epsilon=0.5,
+        super(Relative, self).__init__(
             variable_params, data, low_frequency_cutoff, **kwargs)
         # check that all of the frequency cutoffs are the same
         # FIXME: this can probably be loosened at some point
@@ -178,49 +178,62 @@ class RelativeSPA(BaseGaussianNoise):
         self.comp_data = {ifo: d.numpy() for ifo, d in self.data.items()}
         self.comp_psds = {ifo: p.numpy() for ifo, p in self.psds.items()}
         # store fiducial waveform params
-        self.mass1_ref = float(mass1_ref)
-        self.mass2_ref = float(mass2_ref)
-        self.spin1z_ref = float(spin1z_ref)
-        self.spin2z_ref = float(spin2z_ref)
-        self.lambda1_ref = float(lambda1_ref)
-        self.lambda2_ref = float(lambda2_ref)
-        self.ra_ref = float(ra_ref)
-        self.dec_ref = float(dec_ref)
-        self.tc_ref = float(tc_ref)
-        self.inclination_ref = float(inclination_ref)
-        self.polarization_ref = float(polarization_ref)
-        self.save_stilde = 'save_stilde' in kwargs
+        self.fid_params = fiducial_params
+        #self.mass1_ref = float(mass1_ref)
+        #self.mass2_ref = float(mass2_ref)
+        #self.spin1z_ref = float(spin1z_ref)
+        #self.spin2z_ref = float(spin2z_ref)
+        #self.lambda1_ref = float(lambda1_ref)
+        #self.lambda2_ref = float(lambda2_ref)
+        #self.ra_ref = float(ra_ref)
+        #self.dec_ref = float(dec_ref)
+        #self.tc_ref = float(tc_ref)
+        #self.inclination_ref = float(inclination_ref)
+        #self.polarization_ref = float(polarization_ref)
+        #self.save_stilde = 'save_stilde' in kwargs
 
         # get detector-specific arrival times relative to end of data
-        dt = {ifo:
-              self.det[ifo].time_delay_from_earth_center(self.ra_ref,
-                                                         self.dec_ref,
-                                                         self.tc_ref)
-              for ifo in self.data}
-        self.ta = {ifo: self.tc_ref + dt[ifo] - self.end_time
-                   for ifo in self.data}
+        #dt = {ifo:
+        #      self.det[ifo].time_delay_from_earth_center(self.ra_ref,
+        #                                                 self.dec_ref,
+        #                                                 self.tc_ref)
+        #      for ifo in self.data}
+        #self.ta = {ifo: self.tc_ref + dt[ifo] - self.end_time
+        #           for ifo in self.data}
 
+        dt = {ifo:
+              self.det[ifo].time_delay_from_earth_center(
+                  self.fid_params['ra'], self.fid_params['dec'],
+                  self.fid_params['tc'])
+              for ifo in self.data}
+        self.ta = {ifo: self.fid_params['tc'] + dt[ifo] - self.end_time
+                   for ifo in self.data}
         # generate fiducial waveform
         f_lo = kmins[0] * self.df
         f_hi = kmaxs[0] * self.df
-        logging.info("Generating fiducial waveform from %s to %s Hz",
-                     % (f_lo, f_hi))
+        print("high-frequency-cutoff = {}".format(f_hi))
+        logging.info("Generating fiducial waveform from %s to %s Hz" % (f_lo, f_hi))
         # prune f=0 point so IMR doesn't complain
         fpoints = Array(self.f.astype(numpy.float64))[1:]
-        fid_params = dict(mass1=self.mass1_ref, mass2=self.mass2_ref,
-                          spin1z=self.spin1z_ref, spin2z=self.spin2z_ref,
-                          lambda1=self.lambda1_ref, lambda2=self.lambda2_ref,
-                          inclination=self.inclination_ref,
-                          approximant=self.static_params['approximant'],
-                          sample_points=fpoints)
-        fid_hp, fid_hc = get_fd_waveform_sequence(**fid_params)
+        #fid_params = dict(mass1=self.mass1_ref, mass2=self.mass2_ref,
+        #                  spin1z=self.spin1z_ref, spin2z=self.spin2z_ref,
+        #                  lambda1=self.lambda1_ref, lambda2=self.lambda2_ref,
+        #                  inclination=self.inclination_ref,
+        #                  approximant=self.static_params['approximant'],
+        #                  sample_points=fpoints)
+        fid_hp, fid_hc = get_fd_waveform_sequence(
+            approximant=self.static_params['approximant'],
+            sample_points=fpoints, **self.fid_params)
         self.h00 = {}
         for ifo in self.data:
             # make copy of fiducial wfs, adding back in f=0
             hp0 = numpy.concatenate([[0j], fid_hp.copy()])
             hc0 = numpy.concatenate([[0j], fid_hc.copy()])
+            #fp, fc = self.det[ifo].antenna_pattern(
+            #    self.ra_ref, self.dec_ref, self.polarization_ref, self.tc_ref)
             fp, fc = self.det[ifo].antenna_pattern(
-                self.ra_ref, self.dec_ref, self.polarization_ref, self.tc_ref)
+                self.fid_params['ra'], self.fid_params['dec'],
+                self.fid_params['polarization'], self.fid_params['tc'])
             tshift = numpy.exp(-2.0j * numpy.pi * self.f * self.ta[ifo])
             self.h00[ifo] = numpy.array(hp0 * fp + hc0 * fc) * tshift
 
@@ -359,13 +372,25 @@ class RelativeSPA(BaseGaussianNoise):
         fp : pycbc.inference.io.BaseInferenceFile instance
             The inference file to write to.
         """
-        super(RelativeSPA, self).write_metadata(
-            fp, save_stilde=self.save_stilde)
-        fp.attrs['mass1_ref'] = self.mass1_ref
-        fp.attrs['mass2_ref'] = self.mass2_ref
-        fp.attrs['spin1z_ref'] = self.spin1z_ref
-        fp.attrs['spin2z_ref'] = self.spin2z_ref
-        fp.attrs['ra_ref'] = self.ra_ref
-        fp.attrs['dec_ref'] = self.dec_ref
-        fp.attrs['tc_ref'] = self.tc_ref
+        super(Relative, self).write_metadata(fp)
         fp.attrs['epsilon'] = self.epsilon
+        for p, v in self.fid_params.items():
+            fp.attrs['{}_ref'.format(p)] = v
+
+    @staticmethod
+    def extra_args_from_config(cp, section, skip_args=None, dtypes=None):
+        # add fiducial params to skip list
+        skip_args += [option for option in cp.options(section) if
+                      option.endswith('_ref')]
+        args = super(Relative, Relative).extra_args_from_config(
+            cp, section, skip_args=skip_args, dtypes=dtypes)
+        # get fiducial params from config
+        fid_params = {p.replace('_ref', ''): float(cp.get('model', p)) for p
+                      in cp.options('model') if p.endswith('_ref')}
+        # add optional params with default values if not specified
+        opt_params = {'ra': numpy.pi, 'dec': 0.0, 'inclination': 0.0,
+                      'polarization': numpy.pi}
+        fid_params.update({p: opt_params[p] for p in opt_params if p
+                           not in fid_params})
+        args.update({'fiducial_params': fid_params})
+        return args
