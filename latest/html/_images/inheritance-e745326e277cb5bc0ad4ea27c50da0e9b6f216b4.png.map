@@ -1,7 +1,0 @@
-<map id="inheritance113e3834eb" name="inheritance113e3834eb">
-<area shape="rect" id="node1" href="../pycbc.inference.sampler.html#pycbc.inference.sampler.base.BaseSampler" target="_top" title="Abstract base class for all inference samplers." alt="" coords="3,4,125,19"/>
-<area shape="rect" id="node5" href="../pycbc.inference.sampler.html#pycbc.inference.sampler.emcee_pt.EmceePTSampler" target="_top" title="This class is used to construct a parallel&#45;tempered MCMC sampler from" alt="" coords="234,50,393,65"/>
-<area shape="rect" id="node2" href="../pycbc.inference.sampler.html#pycbc.inference.sampler.base_mcmc.BaseMCMC" target="_top" title="Abstract base class that provides methods common to MCMCs." alt="" coords="140,4,281,19"/>
-<area shape="rect" id="node3" href="../pycbc.inference.sampler.html#pycbc.inference.sampler.base_multitemper.MultiTemperedAutocorrSupport" target="_top" title="Provides class methods for calculating multi&#45;tempered ACFs/ACLs." alt="" coords="296,4,539,19"/>
-<area shape="rect" id="node4" href="../pycbc.inference.sampler.html#pycbc.inference.sampler.base_multitemper.MultiTemperedSupport" target="_top" title="Provides methods for supporting multi&#45;tempered samplers." alt="" coords="555,4,765,19"/>
-</map>
