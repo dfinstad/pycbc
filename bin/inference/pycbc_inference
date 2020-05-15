@@ -298,6 +298,7 @@ with ctx:
         inj_file = cp.get('data', 'injection-file')
         with h5py.File(inj_file, 'r') as fp:
             inj_params = {k: v for k, v in fp.attrs.items()}
+            inj_params.update({k: v[0] for k, v in fp.items()})
         # report injection parameters
         logging.info("Injection parameters:")
         for k, v in inj_params.items():
