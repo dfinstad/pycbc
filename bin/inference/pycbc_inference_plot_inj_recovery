@@ -30,7 +30,7 @@ parser.add_argument("--verbose", action="store_true",
 parser.add_argument("--quantiles", nargs=2, type=float, default=[0.05, 0.95],
                     help="Quantiles to use as limits.")
 parser.add_argument("--tight-layout", action="store_true", default=False,
-                    help="Use matplotlib tight-layout format."
+                    help="Use matplotlib tight-layout format.")
 option_utils.add_scatter_option_group(parser)
 opts = parser.parse_args()
 
