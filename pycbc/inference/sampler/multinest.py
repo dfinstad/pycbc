@@ -82,6 +82,11 @@ class MultinestSampler(BaseSampler):
         self._constraints = constraints
         self._nlivepoints = nlivepoints
         self._ndim = len(model.variable_params)
+        # set RA domain to be cyclic
+        self._wrapped = [0] * self._ndim
+        if 'ra' in model.variable_params:
+            ra_idx = list(model.variable_params).index('ra')
+            self._wrapped[ra_idx] = 1
         self._random_state = numpy.random.get_state()
         self._checkpoint_interval = checkpoint_interval
         self._ztol = evidence_tolerance
@@ -272,6 +277,7 @@ class MultinestSampler(BaseSampler):
             # run multinest
             self.run_multinest(self.loglikelihood, self.transform_prior,
                                self._ndim, n_live_points=self.nlivepoints,
+                               wrapped_params=self._wrapped,
                                evidence_tolerance=self._ztol,
                                sampling_efficiency=self._eff,
                                importance_nested_sampling=self._ins,
