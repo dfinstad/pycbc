@@ -76,7 +76,7 @@ class CubeModel(object):
         params = dict(zip(self.model.sampling_params, cube))
         self.model.update(**params)
         if self.model.logprior == -numpy.inf:
-            return -numpy.inf
+            return -1e20
         return getattr(self.model, self.loglikelihood_function)
 
     def prior_transform(self, cube):
