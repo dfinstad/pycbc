@@ -127,18 +127,19 @@ def use_mpi(require_mpi=False, log=True):
     """
     use_mpi = False
     size = rank = 0
-    try:
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        size = comm.Get_size()
-        rank = comm.Get_rank()
-        if size > 1:
-            use_mpi = True
-            if log:
-                logging.info('Running under mpi with size: %s, rank: %s',
-                             size, rank)
-    except ImportError as e:
-        if require_mpi:
+    if require_mpi:
+        try:
+            from mpi4py import MPI
+            comm = MPI.COMM_WORLD
+            size = comm.Get_size()
+            rank = comm.Get_rank()
+            if size > 1:
+                use_mpi = True
+                if log:
+                    logging.info('Running under mpi with size: %s, rank: %s',
+                                 size, rank)
+        except ImportError as e:
+            #if require_mpi:
             print(e)
             raise ValueError("Failed to load mpi, ensure mpi4py is installed")
     return use_mpi, size, rank
