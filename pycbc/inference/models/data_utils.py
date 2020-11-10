@@ -20,10 +20,10 @@ import logging
 from argparse import ArgumentParser
 from time import sleep
 import numpy
-try:
-    from mpi4py import MPI
-except ImportError:
-    MPI = None
+#try:
+#    from mpi4py import MPI
+#except ImportError:
+#    MPI = None
 
 from pycbc.types import MultiDetOptionAction
 from pycbc.psd import (insert_psd_option_group_multi_ifo,
@@ -189,13 +189,17 @@ def check_validtimes(detector, gps_start, gps_end, shift_to_valid=False,
         max_shift = int(gps_end - gps_start)
     check_start = gps_start - max_shift
     check_end = gps_end + max_shift
+
+    # NOTE: disabled this to avoid multiprocessing failure when importing mpi4py
+    # on a machine built against different mpi libs
     # if we're running in an mpi enviornment and we're not the parent process,
     # we'll wait before quering the segment database. This will result in
     # getting the segments from the cache, so as not to overload the database
-    if MPI is not None and (MPI.COMM_WORLD.Get_size() > 1 and
-                            MPI.COMM_WORLD.Get_rank() != 0):
-        # we'll wait for 2 minutes
-        sleep(120)
+    #if MPI is not None and (MPI.COMM_WORLD.Get_size() > 1 and
+    #                        MPI.COMM_WORLD.Get_rank() != 0):
+    #    # we'll wait for 2 minutes
+    #    sleep(120)
+
     validsegs = dq.query_flag(detector, segment_name, check_start,
                               check_end, cache=True,
                               **kwargs)
