@@ -154,7 +154,7 @@ class BaseDataModel(BaseModel):
         """Returns the detectors used."""
         return list(self._data.keys())
 
-    def write_metadata(self, fp):
+    def write_metadata(self, fp, discard_data=False):
         """Adds data to the metadata that's written.
 
         Parameters
@@ -163,7 +163,8 @@ class BaseDataModel(BaseModel):
             The inference file to write to.
         """
         super(BaseDataModel, self).write_metadata(fp)
-        fp.write_stilde(self.data)
+        if not discard_data:
+            fp.write_stilde(self.data)
         # save injection parameters
         if self.injection_file is not None:
             fp.write_injections(self.injection_file)
